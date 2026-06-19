@@ -45,7 +45,7 @@ class PetViewModel: ObservableObject {
     }
 
     func showKakaoTalkNotification() {
-        speak("지민님, 메시지가 왔어요!")
+        speak("메시지가 왔어요!")
     }
 
     func choosePetImage() {

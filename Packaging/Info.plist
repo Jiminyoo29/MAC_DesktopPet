@@ -10,7 +10,7 @@
   <key>CFBundleExecutable</key>
   <string>DesktopPet</string>
   <key>CFBundleIdentifier</key>
-  <string>com.jiminyoo.mac-desktoppet</string>
+  <string>app.mac-desktoppet</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
