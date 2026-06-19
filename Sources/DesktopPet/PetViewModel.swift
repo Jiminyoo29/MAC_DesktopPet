@@ -80,6 +80,21 @@ class PetViewModel: ObservableObject {
         speak("시스템 설정에서 전체 디스크 접근을 열어주세요.")
     }
 
+    func openAccessibilitySettings() {
+        let urls = [
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+            "x-apple.systempreferences:com.apple.preference.security"
+        ]
+
+        for value in urls {
+            if let url = URL(string: value), NSWorkspace.shared.open(url) {
+                return
+            }
+        }
+
+        speak("시스템 설정에서 손쉬운 사용 권한을 열어주세요.")
+    }
+
     func choosePetImage() {
         let panel = NSOpenPanel()
         panel.title = "펫 이미지 선택"

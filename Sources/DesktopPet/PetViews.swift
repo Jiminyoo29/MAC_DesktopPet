@@ -20,6 +20,7 @@ struct PetRootView: View {
                 onChooseImage: viewModel.choosePetImage,
                 onResetImage: viewModel.resetPetImage,
                 onOpenFullDiskAccessSettings: viewModel.openFullDiskAccessSettings,
+                onOpenAccessibilitySettings: viewModel.openAccessibilitySettings,
                 onShowNotificationStatus: viewModel.showNotificationStatus,
                 onShowTestNotification: viewModel.showTestNotification
             )

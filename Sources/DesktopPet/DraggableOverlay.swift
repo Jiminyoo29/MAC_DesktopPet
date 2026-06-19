@@ -10,6 +10,7 @@ class PetInteractionView: NSView {
     var onChooseImage: (() -> Void)?
     var onResetImage: (() -> Void)?
     var onOpenFullDiskAccessSettings: (() -> Void)?
+    var onOpenAccessibilitySettings: (() -> Void)?
     var onShowNotificationStatus: (() -> Void)?
     var onShowTestNotification: (() -> Void)?
 
@@ -50,6 +51,10 @@ class PetInteractionView: NSView {
         privacy.target = self
         menu.addItem(privacy)
 
+        let accessibility = NSMenuItem(title: "빠른 감지 권한 열기", action: #selector(openAccessibilitySettings), keyEquivalent: "")
+        accessibility.target = self
+        menu.addItem(accessibility)
+
         let status = NSMenuItem(title: "알림 감지 상태 보기", action: #selector(showNotificationStatus), keyEquivalent: "")
         status.target = self
         menu.addItem(status)
@@ -80,6 +85,10 @@ class PetInteractionView: NSView {
         onOpenFullDiskAccessSettings?()
     }
 
+    @objc private func openAccessibilitySettings() {
+        onOpenAccessibilitySettings?()
+    }
+
     @objc private func showNotificationStatus() {
         onShowNotificationStatus?()
     }
@@ -98,6 +107,7 @@ struct DraggableOverlay: NSViewRepresentable {
     let onChooseImage: () -> Void
     let onResetImage: () -> Void
     let onOpenFullDiskAccessSettings: () -> Void
+    let onOpenAccessibilitySettings: () -> Void
     let onShowNotificationStatus: () -> Void
     let onShowTestNotification: () -> Void
 
@@ -108,6 +118,7 @@ struct DraggableOverlay: NSViewRepresentable {
         v.onChooseImage = onChooseImage
         v.onResetImage = onResetImage
         v.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings
+        v.onOpenAccessibilitySettings = onOpenAccessibilitySettings
         v.onShowNotificationStatus = onShowNotificationStatus
         v.onShowTestNotification = onShowTestNotification
         return v
@@ -118,6 +129,7 @@ struct DraggableOverlay: NSViewRepresentable {
         nsView.onChooseImage = onChooseImage
         nsView.onResetImage = onResetImage
         nsView.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings
+        nsView.onOpenAccessibilitySettings = onOpenAccessibilitySettings
         nsView.onShowNotificationStatus = onShowNotificationStatus
         nsView.onShowTestNotification = onShowTestNotification
     }

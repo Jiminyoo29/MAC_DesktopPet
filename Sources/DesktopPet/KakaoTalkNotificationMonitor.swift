@@ -1,6 +1,8 @@
 import Foundation
 import SQLite3
 import Darwin
+import AppKit
+import ApplicationServices
 
 final class KakaoTalkNotificationMonitor {
     private let interval: TimeInterval
@@ -134,6 +136,10 @@ final class KakaoTalkNotificationMonitor {
     }
 
     private static func latestKakaoTalkNotificationFingerprints() -> PollResult {
+        if let visibleResult = latestVisibleKakaoTalkNotificationFingerprints() {
+            return visibleResult
+        }
+
         let fileManager = FileManager.default
         let home = fileManager.homeDirectoryForCurrentUser
         let candidates = [
@@ -162,6 +168,78 @@ final class KakaoTalkNotificationMonitor {
         }
 
         return .fingerprints([], "알림 DB 접근 가능, 카카오톡 기록 없음")
+    }
+
+    private static func latestVisibleKakaoTalkNotificationFingerprints() -> PollResult? {
+        guard AXIsProcessTrusted() else { return nil }
+
+        let notificationCenterApps = NSWorkspace.shared.runningApplications.filter { app in
+            let name = app.localizedName?.lowercased() ?? ""
+            let bundleIdentifier = app.bundleIdentifier?.lowercased() ?? ""
+            return name.contains("notification")
+                || bundleIdentifier.contains("notificationcenter")
+                || bundleIdentifier.contains("usernoted")
+        }
+
+        var matches: [String] = []
+
+        for app in notificationCenterApps {
+            let appElement = AXUIElementCreateApplication(app.processIdentifier)
+            let texts = visibleTexts(in: appElement, depth: 0)
+            for text in texts {
+                let lowercased = text.lowercased()
+                if lowercased.contains("kakao") || text.contains("카카오") {
+                    matches.append(String(text.hashValue))
+                }
+            }
+        }
+
+        guard !matches.isEmpty else { return nil }
+        return .fingerprints(matches, "화면 알림 배너 \(matches.count)개 감지")
+    }
+
+    private static func visibleTexts(in element: AXUIElement, depth: Int) -> [String] {
+        guard depth < 5 else { return [] }
+
+        var texts: [String] = []
+        let textAttributes = [
+            kAXTitleAttribute,
+            kAXValueAttribute,
+            kAXDescriptionAttribute,
+            kAXHelpAttribute
+        ]
+
+        for attribute in textAttributes {
+            var value: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+               let value {
+                if let string = value as? String, !string.isEmpty {
+                    texts.append(string)
+                } else if let attributedString = value as? NSAttributedString {
+                    let string = attributedString.string
+                    if !string.isEmpty { texts.append(string) }
+                }
+            }
+        }
+
+        var childrenValue: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenValue) == .success,
+           let children = childrenValue as? [AXUIElement] {
+            for child in children {
+                texts.append(contentsOf: visibleTexts(in: child, depth: depth + 1))
+            }
+        }
+
+        var windowsValue: CFTypeRef?
+        if depth == 0,
+           AXUIElementCopyAttributeValue(element, kAXWindowsAttribute as CFString, &windowsValue) == .success,
+           let windows = windowsValue as? [AXUIElement] {
+            for window in windows {
+                texts.append(contentsOf: visibleTexts(in: window, depth: depth + 1))
+            }
+        }
+
+        return texts
     }
 
     private static func notificationDatabaseWatchURLs() -> [URL] {
