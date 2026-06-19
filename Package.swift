@@ -7,7 +7,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "DesktopPet",
-            path: "Sources/DesktopPet"
+            path: "Sources/DesktopPet",
+            linkerSettings: [
+                .linkedLibrary("sqlite3")
+            ]
         )
     ]
 )

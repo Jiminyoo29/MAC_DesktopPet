@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 
 final class KakaoTalkNotificationMonitor {
     private let interval: TimeInterval
@@ -175,36 +176,80 @@ final class KakaoTalkNotificationMonitor {
     }
 
     private static func runSQLite(databaseURL: URL, sql: String) -> SQLiteResult {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-        process.arguments = ["-readonly", "-batch", "-noheader", databaseURL.path, sql]
+        var database: OpaquePointer?
+        let openCode = sqlite3_open_v2(databaseURL.path, &database, SQLITE_OPEN_READONLY, nil)
+        defer {
+            if database != nil {
+                sqlite3_close(database)
+            }
+        }
 
-        let output = Pipe()
-        let errorOutput = Pipe()
-        process.standardOutput = output
-        process.standardError = errorOutput
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
+        guard openCode == SQLITE_OK, let database else {
+            if isAccessDeniedMessage(database.map(sqliteErrorMessage) ?? "") {
+                return .accessDenied
+            }
             return .failed
         }
 
-        let errorData = errorOutput.fileHandleForReading.readDataToEndOfFile()
-        let errorString = String(data: errorData, encoding: .utf8)?.lowercased() ?? ""
-        if errorString.contains("authorization denied")
-            || errorString.contains("not authorized")
-            || errorString.contains("operation not permitted") {
-            return .accessDenied
+        var statement: OpaquePointer?
+        let prepareCode = sqlite3_prepare_v2(database, sql, -1, &statement, nil)
+        defer {
+            if statement != nil {
+                sqlite3_finalize(statement)
+            }
         }
 
-        guard process.terminationStatus == 0 else { return .failed }
+        guard prepareCode == SQLITE_OK, let statement else {
+            if isAccessDeniedMessage(sqliteErrorMessage(database)) {
+                return .accessDenied
+            }
+            return .failed
+        }
 
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        guard let string = String(data: data, encoding: .utf8) else { return .failed }
-        return .rows(string
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .map(String.init))
+        var rows: [String] = []
+
+        while true {
+            let stepCode = sqlite3_step(statement)
+            switch stepCode {
+            case SQLITE_ROW:
+                let columnCount = sqlite3_column_count(statement)
+                let values = (0..<columnCount).map { index -> String in
+                    switch sqlite3_column_type(statement, index) {
+                    case SQLITE_NULL:
+                        return ""
+                    case SQLITE_BLOB:
+                        guard let bytes = sqlite3_column_blob(statement, index) else { return "" }
+                        let count = Int(sqlite3_column_bytes(statement, index))
+                        let buffer = UnsafeRawBufferPointer(start: bytes, count: count)
+                        return buffer.map { String(format: "%02x", $0) }.joined()
+                    default:
+                        guard let text = sqlite3_column_text(statement, index) else { return "" }
+                        return String(cString: text)
+                    }
+                }
+                rows.append(values.joined(separator: "|"))
+            case SQLITE_DONE:
+                return .rows(rows)
+            default:
+                if isAccessDeniedMessage(sqliteErrorMessage(database)) {
+                    return .accessDenied
+                }
+                return .failed
+            }
+        }
+    }
+
+    private static func sqliteErrorMessage(_ database: OpaquePointer) -> String {
+        guard let message = sqlite3_errmsg(database) else { return "" }
+        return String(cString: message).lowercased()
+    }
+
+    private static func isAccessDeniedMessage(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("authorization denied")
+            || lowercased.contains("not authorized")
+            || lowercased.contains("operation not permitted")
+            || lowercased.contains("permission denied")
+            || lowercased.contains("unable to open database")
     }
 }
