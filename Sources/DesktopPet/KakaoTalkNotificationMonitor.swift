@@ -13,9 +13,12 @@ final class KakaoTalkNotificationMonitor {
     private var hasReportedAccessDenied = false
     private var lastStatus = "알림 감지 준비 중"
     private var fileEventSources: [DispatchSourceFileSystemObject] = []
+    private var isPolling = false
+    private var shouldPollAgain = false
+    private let pollQueue = DispatchQueue(label: "io.github.mac-desktoppet.notification-monitor", qos: .userInitiated)
 
     init(
-        interval: TimeInterval = 0.75,
+        interval: TimeInterval = 0.2,
         onNotification: @escaping () -> Void,
         onAccessDenied: @escaping () -> Void,
         onStatusChanged: @escaping (String) -> Void
@@ -52,7 +55,7 @@ final class KakaoTalkNotificationMonitor {
             let source = DispatchSource.makeFileSystemObjectSource(
                 fileDescriptor: descriptor,
                 eventMask: [.write, .extend, .attrib, .rename, .delete],
-                queue: DispatchQueue.global(qos: .utility)
+                queue: pollQueue
             )
             source.setEventHandler { [weak self] in
                 self?.poll()
@@ -66,9 +69,16 @@ final class KakaoTalkNotificationMonitor {
     }
 
     private func poll() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+        pollQueue.async { [weak self] in
             guard let self else { return }
+            if self.isPolling {
+                self.shouldPollAgain = true
+                return
+            }
+
+            self.isPolling = true
             let result = Self.latestKakaoTalkNotificationFingerprints()
+            self.isPolling = false
 
             DispatchQueue.main.async {
                 guard case let .fingerprints(fingerprints, status) = result else {
@@ -96,6 +106,11 @@ final class KakaoTalkNotificationMonitor {
                 if self.seenFingerprints.count > 200 {
                     self.seenFingerprints = Set(self.seenFingerprints.suffix(80))
                 }
+            }
+
+            if self.shouldPollAgain {
+                self.shouldPollAgain = false
+                self.poll()
             }
         }
     }
@@ -182,17 +197,14 @@ final class KakaoTalkNotificationMonitor {
         guard let appIdentifierColumn else { return .rows([]) }
 
         let dateColumn = ["delivered_date", "presented_date", "date"].first { recordColumns.contains($0) }
-        let payloadColumn = ["data", "request", "uuid"].first { recordColumns.contains($0) }
-
         let dateExpression = dateColumn.map { "r.\($0)" } ?? "0"
-        let payloadExpression = payloadColumn.map { "hex(r.\($0))" } ?? "''"
         let sql = """
-        SELECT \(dateExpression) || '|' || a.\(appIdentifierColumn) || '|' || \(payloadExpression)
+        SELECT r.rowid || '|' || \(dateExpression) || '|' || a.\(appIdentifierColumn)
         FROM record r
         LEFT JOIN app a ON r.app_id = a.app_id
         WHERE a.\(appIdentifierColumn) LIKE '%kakao%'
         ORDER BY \(dateExpression) DESC
-        LIMIT 20;
+        LIMIT 8;
         """
         switch runSQLite(databaseURL: databaseURL, sql: sql) {
         case let .rows(rows):
