@@ -1,5 +1,6 @@
 import Foundation
 import SQLite3
+import Darwin
 
 final class KakaoTalkNotificationMonitor {
     private let interval: TimeInterval
@@ -11,9 +12,10 @@ final class KakaoTalkNotificationMonitor {
     private var hasSeededInitialState = false
     private var hasReportedAccessDenied = false
     private var lastStatus = "알림 감지 준비 중"
+    private var fileEventSources: [DispatchSourceFileSystemObject] = []
 
     init(
-        interval: TimeInterval = 2.5,
+        interval: TimeInterval = 0.75,
         onNotification: @escaping () -> Void,
         onAccessDenied: @escaping () -> Void,
         onStatusChanged: @escaping (String) -> Void
@@ -25,6 +27,7 @@ final class KakaoTalkNotificationMonitor {
     }
 
     func start() {
+        startFileWatchers()
         poll()
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.poll()
@@ -34,6 +37,32 @@ final class KakaoTalkNotificationMonitor {
     func stop() {
         timer?.invalidate()
         timer = nil
+        fileEventSources.forEach { $0.cancel() }
+        fileEventSources.removeAll()
+    }
+
+    private func startFileWatchers() {
+        fileEventSources.forEach { $0.cancel() }
+        fileEventSources.removeAll()
+
+        for url in Self.notificationDatabaseWatchURLs() {
+            let descriptor = open(url.path, O_EVTONLY)
+            guard descriptor >= 0 else { continue }
+
+            let source = DispatchSource.makeFileSystemObjectSource(
+                fileDescriptor: descriptor,
+                eventMask: [.write, .extend, .attrib, .rename, .delete],
+                queue: DispatchQueue.global(qos: .utility)
+            )
+            source.setEventHandler { [weak self] in
+                self?.poll()
+            }
+            source.setCancelHandler {
+                close(descriptor)
+            }
+            fileEventSources.append(source)
+            source.resume()
+        }
     }
 
     private func poll() {
@@ -118,6 +147,24 @@ final class KakaoTalkNotificationMonitor {
         }
 
         return .fingerprints([], "알림 DB 접근 가능, 카카오톡 기록 없음")
+    }
+
+    private static func notificationDatabaseWatchURLs() -> [URL] {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let databaseURLs = [
+            home.appendingPathComponent("Library/Group Containers/group.com.apple.usernoted/db2/db"),
+            home.appendingPathComponent("Library/Group Containers/group.com.apple.usernoted/db/db")
+        ]
+
+        var urls: [URL] = []
+        for databaseURL in databaseURLs {
+            urls.append(databaseURL.deletingLastPathComponent())
+            urls.append(databaseURL)
+            urls.append(URL(fileURLWithPath: databaseURL.path + "-wal"))
+            urls.append(URL(fileURLWithPath: databaseURL.path + "-shm"))
+        }
+
+        return urls.filter { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     private static func queryKnownNotificationSchema(databaseURL: URL) -> SQLiteResult {
