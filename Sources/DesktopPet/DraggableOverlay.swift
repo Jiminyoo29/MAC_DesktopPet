@@ -9,6 +9,7 @@ class PetInteractionView: NSView {
     var onDoubleClick: (() -> Void)?
     var onChooseImage: (() -> Void)?
     var onResetImage: (() -> Void)?
+    var onOpenFullDiskAccessSettings: (() -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -42,6 +43,12 @@ class PetInteractionView: NSView {
         menu.addItem(resetImage)
 
         menu.addItem(.separator())
+
+        let privacy = NSMenuItem(title: "알림 감지 권한 열기", action: #selector(openFullDiskAccessSettings), keyEquivalent: "")
+        privacy.target = self
+        menu.addItem(privacy)
+
+        menu.addItem(.separator())
         let quit = NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
         NSMenu.popUpContextMenu(menu, with: event, for: self)
@@ -59,6 +66,10 @@ class PetInteractionView: NSView {
         onResetImage?()
     }
 
+    @objc private func openFullDiskAccessSettings() {
+        onOpenFullDiskAccessSettings?()
+    }
+
     // 투명해도 히트테스트 통과
     override func hitTest(_ point: NSPoint) -> NSView? { self }
 }
@@ -68,6 +79,7 @@ struct DraggableOverlay: NSViewRepresentable {
     let onDoubleClick: () -> Void
     let onChooseImage: () -> Void
     let onResetImage: () -> Void
+    let onOpenFullDiskAccessSettings: () -> Void
 
     func makeNSView(context: Context) -> PetInteractionView {
         let v = PetInteractionView()
@@ -75,6 +87,7 @@ struct DraggableOverlay: NSViewRepresentable {
         v.onDoubleClick = onDoubleClick
         v.onChooseImage = onChooseImage
         v.onResetImage = onResetImage
+        v.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings
         return v
     }
     func updateNSView(_ nsView: PetInteractionView, context: Context) {
@@ -82,5 +95,6 @@ struct DraggableOverlay: NSViewRepresentable {
         nsView.onDoubleClick = onDoubleClick
         nsView.onChooseImage = onChooseImage
         nsView.onResetImage = onResetImage
+        nsView.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings
     }
 }

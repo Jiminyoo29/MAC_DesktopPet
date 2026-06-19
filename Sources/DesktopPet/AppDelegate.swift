@@ -26,9 +26,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
 
         viewModel = PetViewModel()
-        notificationMonitor = KakaoTalkNotificationMonitor { [weak self] in
-            self?.viewModel.showKakaoTalkNotification()
-        }
+        notificationMonitor = KakaoTalkNotificationMonitor(
+            onNotification: { [weak self] in
+                self?.viewModel.showKakaoTalkNotification()
+            },
+            onAccessDenied: { [weak self] in
+                self?.viewModel.showNotificationAccessHelp()
+            }
+        )
 
         window.contentView = NSHostingView(rootView: PetRootView(viewModel: viewModel))
         window.makeKeyAndOrderFront(nil)

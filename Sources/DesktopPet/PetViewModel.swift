@@ -48,6 +48,25 @@ class PetViewModel: ObservableObject {
         speak("메시지가 왔어요!")
     }
 
+    func showNotificationAccessHelp() {
+        speak("알림 감지를 위해 전체 디스크 접근을 허용해 주세요.")
+    }
+
+    func openFullDiskAccessSettings() {
+        let urls = [
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+            "x-apple.systempreferences:com.apple.preference.security"
+        ]
+
+        for value in urls {
+            if let url = URL(string: value), NSWorkspace.shared.open(url) {
+                return
+            }
+        }
+
+        speak("시스템 설정에서 전체 디스크 접근을 열어주세요.")
+    }
+
     func choosePetImage() {
         let panel = NSOpenPanel()
         panel.title = "펫 이미지 선택"

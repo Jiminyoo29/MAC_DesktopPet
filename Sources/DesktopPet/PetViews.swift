@@ -18,7 +18,8 @@ struct PetRootView: View {
                 onTap: viewModel.tap,
                 onDoubleClick: viewModel.openLinkedApp,
                 onChooseImage: viewModel.choosePetImage,
-                onResetImage: viewModel.resetPetImage
+                onResetImage: viewModel.resetPetImage,
+                onOpenFullDiskAccessSettings: viewModel.openFullDiskAccessSettings
             )
                 .zIndex(10)
 
