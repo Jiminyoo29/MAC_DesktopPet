@@ -7,6 +7,7 @@ class PetViewModel: ObservableObject {
     @Published var showDialogue = false
     @Published var isBouncing = false
     @Published var petImagePath: String?
+    private(set) var notificationStatus = "알림 감지 준비 중"
 
     private let petImagePathKey = "petImagePath"
     private let kakaoTalkBundleIdentifier = "com.kakao.KakaoTalkMac"
@@ -46,6 +47,18 @@ class PetViewModel: ObservableObject {
 
     func showKakaoTalkNotification() {
         speak("메시지가 왔어요!")
+    }
+
+    func showTestNotification() {
+        speak("테스트 알림이에요!")
+    }
+
+    func updateNotificationStatus(_ status: String) {
+        notificationStatus = status
+    }
+
+    func showNotificationStatus() {
+        speak(notificationStatus)
     }
 
     func showNotificationAccessHelp() {

@@ -10,6 +10,8 @@ class PetInteractionView: NSView {
     var onChooseImage: (() -> Void)?
     var onResetImage: (() -> Void)?
     var onOpenFullDiskAccessSettings: (() -> Void)?
+    var onShowNotificationStatus: (() -> Void)?
+    var onShowTestNotification: (() -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -48,6 +50,14 @@ class PetInteractionView: NSView {
         privacy.target = self
         menu.addItem(privacy)
 
+        let status = NSMenuItem(title: "알림 감지 상태 보기", action: #selector(showNotificationStatus), keyEquivalent: "")
+        status.target = self
+        menu.addItem(status)
+
+        let test = NSMenuItem(title: "테스트 알림 띄우기", action: #selector(showTestNotification), keyEquivalent: "")
+        test.target = self
+        menu.addItem(test)
+
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
@@ -70,6 +80,14 @@ class PetInteractionView: NSView {
         onOpenFullDiskAccessSettings?()
     }
 
+    @objc private func showNotificationStatus() {
+        onShowNotificationStatus?()
+    }
+
+    @objc private func showTestNotification() {
+        onShowTestNotification?()
+    }
+
     // 투명해도 히트테스트 통과
     override func hitTest(_ point: NSPoint) -> NSView? { self }
 }
@@ -80,6 +98,8 @@ struct DraggableOverlay: NSViewRepresentable {
     let onChooseImage: () -> Void
     let onResetImage: () -> Void
     let onOpenFullDiskAccessSettings: () -> Void
+    let onShowNotificationStatus: () -> Void
+    let onShowTestNotification: () -> Void
 
     func makeNSView(context: Context) -> PetInteractionView {
         let v = PetInteractionView()
@@ -88,6 +108,8 @@ struct DraggableOverlay: NSViewRepresentable {
         v.onChooseImage = onChooseImage
         v.onResetImage = onResetImage
         v.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings
+        v.onShowNotificationStatus = onShowNotificationStatus
+        v.onShowTestNotification = onShowTestNotification
         return v
     }
     func updateNSView(_ nsView: PetInteractionView, context: Context) {
@@ -96,5 +118,7 @@ struct DraggableOverlay: NSViewRepresentable {
         nsView.onChooseImage = onChooseImage
         nsView.onResetImage = onResetImage
         nsView.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings
+        nsView.onShowNotificationStatus = onShowNotificationStatus
+        nsView.onShowTestNotification = onShowTestNotification
     }
 }

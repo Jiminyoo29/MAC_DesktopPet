@@ -5,15 +5,23 @@ final class KakaoTalkNotificationMonitor {
     private let interval: TimeInterval
     private let onNotification: () -> Void
     private let onAccessDenied: () -> Void
+    private let onStatusChanged: (String) -> Void
     private var timer: Timer?
     private var seenFingerprints = Set<String>()
     private var hasSeededInitialState = false
     private var hasReportedAccessDenied = false
+    private var lastStatus = "알림 감지 준비 중"
 
-    init(interval: TimeInterval = 2.5, onNotification: @escaping () -> Void, onAccessDenied: @escaping () -> Void) {
+    init(
+        interval: TimeInterval = 2.5,
+        onNotification: @escaping () -> Void,
+        onAccessDenied: @escaping () -> Void,
+        onStatusChanged: @escaping (String) -> Void
+    ) {
         self.interval = interval
         self.onNotification = onNotification
         self.onAccessDenied = onAccessDenied
+        self.onStatusChanged = onStatusChanged
     }
 
     func start() {
@@ -34,7 +42,8 @@ final class KakaoTalkNotificationMonitor {
             let result = Self.latestKakaoTalkNotificationFingerprints()
 
             DispatchQueue.main.async {
-                guard case let .fingerprints(fingerprints) = result else {
+                guard case let .fingerprints(fingerprints, status) = result else {
+                    self.updateStatus("알림 DB 접근 권한 없음")
                     if !self.hasReportedAccessDenied {
                         self.hasReportedAccessDenied = true
                         self.onAccessDenied()
@@ -43,6 +52,7 @@ final class KakaoTalkNotificationMonitor {
                 }
 
                 self.hasReportedAccessDenied = false
+                self.updateStatus(status)
 
                 if self.hasSeededInitialState {
                     let newFingerprints = fingerprints.filter { !self.seenFingerprints.contains($0) }
@@ -61,8 +71,15 @@ final class KakaoTalkNotificationMonitor {
         }
     }
 
+    private func updateStatus(_ status: String) {
+        guard status != lastStatus else { return }
+        lastStatus = status
+        Self.writeDiagnostic(status)
+        onStatusChanged(status)
+    }
+
     private enum PollResult {
-        case fingerprints([String])
+        case fingerprints([String], String)
         case accessDenied
     }
 
@@ -83,7 +100,7 @@ final class KakaoTalkNotificationMonitor {
         for databaseURL in candidates where fileManager.fileExists(atPath: databaseURL.path) {
             switch queryKnownNotificationSchema(databaseURL: databaseURL) {
             case let .rows(rows) where !rows.isEmpty:
-                return .fingerprints(rows)
+                return .fingerprints(rows, "카카오톡 알림 기록 \(rows.count)개 감지")
             case .accessDenied:
                 return .accessDenied
             default:
@@ -92,7 +109,7 @@ final class KakaoTalkNotificationMonitor {
 
             switch queryFallbackNotificationRows(databaseURL: databaseURL) {
             case let .rows(rows) where !rows.isEmpty:
-                return .fingerprints(rows)
+                return .fingerprints(rows, "카카오톡 알림 흔적 \(rows.count)개 감지")
             case .accessDenied:
                 return .accessDenied
             default:
@@ -100,7 +117,7 @@ final class KakaoTalkNotificationMonitor {
             }
         }
 
-        return .fingerprints([])
+        return .fingerprints([], "알림 DB 접근 가능, 카카오톡 기록 없음")
     }
 
     private static func queryKnownNotificationSchema(databaseURL: URL) -> SQLiteResult {
@@ -251,5 +268,23 @@ final class KakaoTalkNotificationMonitor {
             || lowercased.contains("operation not permitted")
             || lowercased.contains("permission denied")
             || lowercased.contains("unable to open database")
+    }
+
+    private static func writeDiagnostic(_ status: String) {
+        let formatter = ISO8601DateFormatter()
+        let line = "[\(formatter.string(from: Date()))] \(status)\n"
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/MAC DesktopPet.log")
+
+        if let data = line.data(using: .utf8) {
+            if FileManager.default.fileExists(atPath: url.path),
+               let handle = try? FileHandle(forWritingTo: url) {
+                defer { try? handle.close() }
+                _ = try? handle.seekToEnd()
+                _ = try? handle.write(contentsOf: data)
+            } else {
+                try? data.write(to: url)
+            }
+        }
     }
 }

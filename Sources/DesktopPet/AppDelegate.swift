@@ -32,6 +32,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onAccessDenied: { [weak self] in
                 self?.viewModel.showNotificationAccessHelp()
+            },
+            onStatusChanged: { [weak self] status in
+                self?.viewModel.updateNotificationStatus(status)
             }
         )
 

@@ -19,7 +19,9 @@ struct PetRootView: View {
                 onDoubleClick: viewModel.openLinkedApp,
                 onChooseImage: viewModel.choosePetImage,
                 onResetImage: viewModel.resetPetImage,
-                onOpenFullDiskAccessSettings: viewModel.openFullDiskAccessSettings
+                onOpenFullDiskAccessSettings: viewModel.openFullDiskAccessSettings,
+                onShowNotificationStatus: viewModel.showNotificationStatus,
+                onShowTestNotification: viewModel.showTestNotification
             )
                 .zIndex(10)
 
