@@ -24,6 +24,32 @@ swift run --disable-sandbox
 swift build --disable-sandbox
 ```
 
+## 배포용 앱 만들기
+
+아래 명령은 release 빌드 후 더블클릭 가능한 macOS 앱 번들과 zip 파일을 만듭니다.
+
+```sh
+scripts/build_app.sh
+```
+
+생성되는 파일:
+
+```text
+dist/MAC DesktopPet.app
+dist/MAC_DesktopPet-macOS.zip
+```
+
+로컬 설치:
+
+```sh
+mkdir -p ~/Applications
+ditto "dist/MAC DesktopPet.app" "$HOME/Applications/MAC DesktopPet.app"
+```
+
+GitHub 배포 시에는 `dist/MAC_DesktopPet-macOS.zip`을 Release asset으로 올리면 됩니다.
+
+현재 앱은 ad-hoc 서명 상태입니다. GitHub Release로 공개 배포하면 사용자가 처음 실행할 때 macOS Gatekeeper 경고를 볼 수 있습니다. 경고 없는 배포를 하려면 Apple Developer ID 인증서로 서명하고 notarization을 진행해야 합니다.
+
 ## 알림 감지 방식
 
 macOS는 다른 앱의 알림 내용을 직접 읽는 공식 API를 제공하지 않습니다. 이 앱은 Notification Center의 로컬 기록에서 카카오톡 알림 흔적을 주기적으로 확인합니다.
