@@ -7,6 +7,11 @@ import SwiftUI
 class PetInteractionView: NSView {
     var onTap: (() -> Void)?
     var onDoubleClick: (() -> Void)?
+    var onSetName: (() -> Void)?
+    var onSetFriendlyTone: (() -> Void)?
+    var onSetPoliteTone: (() -> Void)?
+    var onSetCuteTone: (() -> Void)?
+    var onSetChicTone: (() -> Void)?
     var onChooseLinkedApp: (() -> Void)?
     var onChooseImage: (() -> Void)?
     var onResetImage: (() -> Void)?
@@ -46,6 +51,31 @@ class PetInteractionView: NSView {
         let chooseApp = NSMenuItem(title: "연결 앱 바꾸기...", action: #selector(chooseLinkedApp), keyEquivalent: "")
         chooseApp.target = self
         menu.addItem(chooseApp)
+
+        let setName = NSMenuItem(title: "이름 바꾸기...", action: #selector(setName), keyEquivalent: "")
+        setName.target = self
+        menu.addItem(setName)
+
+        let toneMenu = NSMenu()
+        let friendly = NSMenuItem(title: "기본", action: #selector(setFriendlyTone), keyEquivalent: "")
+        friendly.target = self
+        toneMenu.addItem(friendly)
+
+        let polite = NSMenuItem(title: "공손", action: #selector(setPoliteTone), keyEquivalent: "")
+        polite.target = self
+        toneMenu.addItem(polite)
+
+        let cute = NSMenuItem(title: "애교", action: #selector(setCuteTone), keyEquivalent: "")
+        cute.target = self
+        toneMenu.addItem(cute)
+
+        let chic = NSMenuItem(title: "시크", action: #selector(setChicTone), keyEquivalent: "")
+        chic.target = self
+        toneMenu.addItem(chic)
+
+        let toneItem = NSMenuItem(title: "말투", action: nil, keyEquivalent: "")
+        toneItem.submenu = toneMenu
+        menu.addItem(toneItem)
 
         let chooseImage = NSMenuItem(title: "이미지 바꾸기...", action: #selector(chooseImage), keyEquivalent: "")
         chooseImage.target = self
@@ -112,6 +142,26 @@ class PetInteractionView: NSView {
         onChooseLinkedApp?()
     }
 
+    @objc private func setName() {
+        onSetName?()
+    }
+
+    @objc private func setFriendlyTone() {
+        onSetFriendlyTone?()
+    }
+
+    @objc private func setPoliteTone() {
+        onSetPoliteTone?()
+    }
+
+    @objc private func setCuteTone() {
+        onSetCuteTone?()
+    }
+
+    @objc private func setChicTone() {
+        onSetChicTone?()
+    }
+
     @objc private func chooseImage() {
         onChooseImage?()
     }
@@ -163,6 +213,11 @@ class PetInteractionView: NSView {
 struct DraggableOverlay: NSViewRepresentable {
     let onTap: () -> Void
     let onDoubleClick: () -> Void
+    let onSetName: () -> Void
+    let onSetFriendlyTone: () -> Void
+    let onSetPoliteTone: () -> Void
+    let onSetCuteTone: () -> Void
+    let onSetChicTone: () -> Void
     let onChooseLinkedApp: () -> Void
     let onChooseImage: () -> Void
     let onResetImage: () -> Void
@@ -180,6 +235,11 @@ struct DraggableOverlay: NSViewRepresentable {
         let v = PetInteractionView()
         v.onTap = onTap
         v.onDoubleClick = onDoubleClick
+        v.onSetName = onSetName
+        v.onSetFriendlyTone = onSetFriendlyTone
+        v.onSetPoliteTone = onSetPoliteTone
+        v.onSetCuteTone = onSetCuteTone
+        v.onSetChicTone = onSetChicTone
         v.onChooseLinkedApp = onChooseLinkedApp
         v.onChooseImage = onChooseImage
         v.onResetImage = onResetImage
@@ -197,6 +257,11 @@ struct DraggableOverlay: NSViewRepresentable {
     func updateNSView(_ nsView: PetInteractionView, context: Context) {
         nsView.onTap = onTap
         nsView.onDoubleClick = onDoubleClick
+        nsView.onSetName = onSetName
+        nsView.onSetFriendlyTone = onSetFriendlyTone
+        nsView.onSetPoliteTone = onSetPoliteTone
+        nsView.onSetCuteTone = onSetCuteTone
+        nsView.onSetChicTone = onSetChicTone
         nsView.onChooseLinkedApp = onChooseLinkedApp
         nsView.onChooseImage = onChooseImage
         nsView.onResetImage = onResetImage

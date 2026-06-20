@@ -7,6 +7,8 @@ class PetViewModel: ObservableObject {
     @Published var showDialogue = false
     @Published var isBouncing = false
     @Published var petImagePath: String?
+    @Published var petName: String
+    @Published var tone: PetTone
     @Published var appName: String
     @Published var scale: Double
     private(set) var notificationStatus = "알림 감지 준비 중"
@@ -18,7 +20,6 @@ class PetViewModel: ObservableObject {
     private let onClosePet: (UUID) -> Void
 
     private let dialogues = [
-        "안녕하세요! 😊",
         "오늘도 화이팅! 💪",
         "코딩 잘 되고 있어요? 🖥️",
         "잠깐 쉬어가요~ ☕",
@@ -41,6 +42,8 @@ class PetViewModel: ObservableObject {
         onClosePet: @escaping (UUID) -> Void
     ) {
         id = configuration.id
+        petName = configuration.name
+        tone = configuration.tone
         appName = configuration.appName
         bundleIdentifier = configuration.bundleIdentifier
         petImagePath = configuration.imagePath
@@ -51,7 +54,10 @@ class PetViewModel: ObservableObject {
     }
 
     func tap() {
-        speak(dialogues.randomElement() ?? "안녕하세요! 😊")
+        let line = Bool.random()
+            ? tone.line(name: petName, event: .hello)
+            : (dialogues.randomElement() ?? tone.line(name: petName, event: .hello))
+        speak(line)
     }
 
     func openLinkedApp() {
@@ -63,11 +69,11 @@ class PetViewModel: ObservableObject {
     }
 
     func showNotification() {
-        speak("\(appName) 알림이 왔어요!")
+        speak(tone.line(name: petName, event: .notification, appName: appName))
     }
 
     func showTestNotification() {
-        speak("테스트 알림이에요!")
+        speak(tone.line(name: petName, event: .test, appName: appName))
     }
 
     func createPet() {
@@ -80,17 +86,46 @@ class PetViewModel: ObservableObject {
 
     func setSmallSize() {
         setScale(0.8)
-        speak("작게 변했어요.")
+        speak(tone.line(name: petName, event: .small))
     }
 
     func setMediumSize() {
         setScale(1.0)
-        speak("기본 크기예요.")
+        speak(tone.line(name: petName, event: .medium))
     }
 
     func setLargeSize() {
         setScale(1.25)
-        speak("크게 변했어요.")
+        speak(tone.line(name: petName, event: .large))
+    }
+
+    func setName() {
+        let alert = NSAlert()
+        alert.messageText = "펫 이름"
+        alert.informativeText = "이 펫을 뭐라고 부를까요?"
+        alert.addButton(withTitle: "저장")
+        alert.addButton(withTitle: "취소")
+
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        input.stringValue = petName
+        alert.accessoryView = input
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            let trimmed = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                speak("이름을 입력해 주세요.")
+                return
+            }
+            petName = trimmed
+            saveConfiguration()
+            speak(tone.line(name: petName, event: .nameChanged))
+        }
+    }
+
+    func setTone(_ tone: PetTone) {
+        self.tone = tone
+        saveConfiguration()
+        speak(tone.line(name: petName, event: .toneChanged))
     }
 
     func chooseLinkedApp() {
@@ -114,7 +149,7 @@ class PetViewModel: ObservableObject {
             appName = displayName ?? bundleName ?? url.deletingPathExtension().lastPathComponent
             self.bundleIdentifier = bundleIdentifier
             saveConfiguration()
-            speak("\(appName)에 연결했어요.")
+            speak(tone.line(name: petName, event: .appLinked, appName: appName))
         }
     }
 
@@ -171,19 +206,21 @@ class PetViewModel: ObservableObject {
         if panel.runModal() == .OK, let url = panel.url {
             petImagePath = url.path
             saveConfiguration()
-            speak("새 모습 마음에 들어요?")
+            speak(tone.line(name: petName, event: .imageChanged))
         }
     }
 
     func resetPetImage() {
         petImagePath = nil
         saveConfiguration()
-        speak("토끼로 돌아왔어요! 🐰")
+        speak(tone.line(name: petName, event: .imageReset))
     }
 
     func configuration() -> PetConfiguration {
         PetConfiguration(
             id: id,
+            name: petName,
+            tone: tone,
             appName: appName,
             bundleIdentifier: bundleIdentifier,
             imagePath: petImagePath,

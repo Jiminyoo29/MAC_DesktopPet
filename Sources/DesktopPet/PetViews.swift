@@ -17,6 +17,11 @@ struct PetRootView: View {
             DraggableOverlay(
                 onTap: viewModel.tap,
                 onDoubleClick: viewModel.openLinkedApp,
+                onSetName: viewModel.setName,
+                onSetFriendlyTone: { viewModel.setTone(.friendly) },
+                onSetPoliteTone: { viewModel.setTone(.polite) },
+                onSetCuteTone: { viewModel.setTone(.cute) },
+                onSetChicTone: { viewModel.setTone(.chic) },
                 onChooseLinkedApp: viewModel.chooseLinkedApp,
                 onChooseImage: viewModel.choosePetImage,
                 onResetImage: viewModel.resetPetImage,
