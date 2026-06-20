@@ -23,22 +23,6 @@ class PetViewModel: ObservableObject {
     private let onCreatePet: () -> Void
     private let onClosePet: (UUID) -> Void
 
-    private let dialogues = [
-        "오늘도 화이팅! 💪",
-        "코딩 잘 되고 있어요? 🖥️",
-        "잠깐 쉬어가요~ ☕",
-        "배고파요 🍕",
-        "같이 놀아요! 🎮",
-        "졸려요... 😴",
-        "오늘 날씨 좋다! ☀️",
-        "열심히 응원할게요! 🌟",
-        "헤헤, 귀엽죠? 🥰",
-        "무엇을 도와드릴까요? ✨",
-        "스트레칭 했나요? 🙆",
-        "물 마시는 거 잊지 마요! 💧",
-        "같이 힘내요! 🐾",
-    ]
-
     init(
         configuration: PetConfiguration,
         onConfigurationChanged: @escaping (PetConfiguration) -> Void,
@@ -62,10 +46,8 @@ class PetViewModel: ObservableObject {
     }
 
     func tap() {
-        let line = Bool.random()
-            ? tone.line(name: petName, event: .hello)
-            : (dialogues.randomElement() ?? tone.line(name: petName, event: .hello))
-        speak(line)
+        let lines = tone.clickLines(name: petName, userName: userName, appName: appName)
+        speak(lines.randomElement() ?? tone.line(name: petName, event: .hello))
     }
 
     func openLinkedApp() {

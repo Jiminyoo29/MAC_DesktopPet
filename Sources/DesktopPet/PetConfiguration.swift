@@ -84,6 +84,85 @@ enum PetTone: String, Codable, CaseIterable, Equatable {
         }
     }
 
+    func clickLines(name: String, userName: String, appName: String) -> [String] {
+        let user = Self.formattedUserName(userName)
+        let app = appName.isEmpty ? "연결 앱" : appName
+
+        switch self {
+        case .friendly:
+            return [
+                "\(user), 저 여기 있어요!",
+                "오늘도 같이 가봐요.",
+                "\(name)이 응원 중이에요.",
+                "잠깐 어깨 펴고 숨 쉬어요.",
+                "물 한 모금 마실 시간이에요.",
+                "\(app)도 제가 보고 있을게요.",
+                "좋아요, 다음 할 일도 차근차근.",
+                "집중 모드 들어갑니다.",
+                "괜찮아요. 천천히 해도 돼요.",
+                "지금 흐름 좋아요.",
+                "쉬고 싶으면 제가 신호 줄게요.",
+                "작은 일부터 하나씩 끝내봐요.",
+                "\(user), 오늘도 꽤 잘하고 있어요.",
+                "\(name)이 옆에서 대기 중이에요."
+            ]
+
+        case .polite:
+            return [
+                "\(user), 필요하시면 말씀해 주세요.",
+                "잠시 쉬어가셔도 좋습니다.",
+                "\(name)이 조용히 대기하고 있습니다.",
+                "오늘 일정도 차분히 정리해 보세요.",
+                "물 한 잔 드시는 것도 좋겠습니다.",
+                "\(app) 알림은 제가 살펴보겠습니다.",
+                "무리하지 마시고 천천히 진행하세요.",
+                "좋은 흐름입니다. 계속 이어가 보세요.",
+                "작은 작업부터 정리해 보시면 좋겠습니다.",
+                "집중하실 수 있게 곁에 있겠습니다.",
+                "\(user), 충분히 잘하고 계십니다.",
+                "필요하실 때 다시 불러 주세요.",
+                "잠깐 자세를 바로잡아 보세요.",
+                "오늘도 안정적으로 진행해 보겠습니다."
+            ]
+
+        case .cute:
+            return [
+                "\(user)! 나 불렀어용?",
+                "\(name) 뿅 등장!",
+                "히히, 같이 힘내봐용.",
+                "물 마시면 칭찬해줄게용.",
+                "잠깐 스트레칭 뿅!",
+                "\(app)도 내가 지켜볼게용.",
+                "오늘도 반짝반짝 해보자용.",
+                "우와, 지금 집중력 멋져용.",
+                "쉬어도 괜찮아용. 내가 기다릴게용.",
+                "\(name)이 응원 빔 발사!",
+                "작은 성공 하나 만들러 가봐용.",
+                "기분 체크 뿅. 괜찮아용?",
+                "\(user), 너무 무리하지 말아용.",
+                "나 여기서 얌전히 대기 중이야용."
+            ]
+
+        case .chic:
+            return [
+                "대기 중.",
+                "불렀어?",
+                "좋아. 계속.",
+                "물 마셔.",
+                "자세 확인.",
+                "\(app) 감시 중.",
+                "\(name). 준비됨.",
+                "쉬어도 됨.",
+                "집중.",
+                "다음.",
+                "\(user). 괜찮아.",
+                "천천히.",
+                "할 수 있음.",
+                "보고 있음."
+            ]
+        }
+    }
+
     func line(name: String, event: PetLineEvent, appName: String? = nil) -> String {
         let app = appName ?? "앱"
 
@@ -180,6 +259,13 @@ enum PetTone: String, Codable, CaseIterable, Equatable {
         case (.chic, .toneChanged):
             return "말투 변경."
         }
+    }
+
+    private static func formattedUserName(_ userName: String) -> String {
+        if userName.hasSuffix("님") || userName.hasSuffix("씨") {
+            return userName
+        }
+        return "\(userName)님"
     }
 }
 
