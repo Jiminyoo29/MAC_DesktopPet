@@ -7,11 +7,18 @@ func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
     }
 }
 
+func containsEmoji(_ text: String) -> Bool {
+    text.unicodeScalars.contains { scalar in
+        scalar.properties.isEmojiPresentation || scalar.properties.isEmoji
+    }
+}
+
 for tone in PetTone.allCases {
     let lines = tone.clickLines(name: "토끼", userName: "지민", appName: "KakaoTalk")
     expect(lines.count >= 12, "\(tone.rawValue) should have at least 12 click lines")
     expect(Set(lines).count == lines.count, "\(tone.rawValue) click lines should be unique")
     expect(lines.allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }, "\(tone.rawValue) click lines should not be empty")
+    expect(lines.allSatisfy(containsEmoji), "\(tone.rawValue) click lines should always include emoji")
 }
 
 let friendly = Set(PetTone.friendly.clickLines(name: "토끼", userName: "지민", appName: "KakaoTalk"))
