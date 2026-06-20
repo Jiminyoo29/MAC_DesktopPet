@@ -11,6 +11,8 @@
   <string>DesktopPet</string>
   <key>CFBundleIdentifier</key>
   <string>io.github.mac-desktoppet</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>

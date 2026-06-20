@@ -13,11 +13,14 @@ cd "$ROOT_DIR"
 mkdir -p "$BUILD_CACHE"
 rm -rf "$APP_DIR" "$ZIP_PATH"
 
+swift "$ROOT_DIR/scripts/generate_app_icon.swift" >/dev/null
+
 CLANG_MODULE_CACHE_PATH="$BUILD_CACHE" swift build -c release --disable-sandbox
 
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$ROOT_DIR/.build/arm64-apple-macosx/release/$EXECUTABLE_NAME" "$APP_DIR/Contents/MacOS/$EXECUTABLE_NAME"
 cp "$ROOT_DIR/Packaging/Info.plist" "$APP_DIR/Contents/Info.plist"
+cp "$ROOT_DIR/Packaging/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 printf "APPL????" > "$APP_DIR/Contents/PkgInfo"
 chmod 755 "$APP_DIR/Contents/MacOS/$EXECUTABLE_NAME"
 
