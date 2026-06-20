@@ -18,6 +18,7 @@ final class KakaoTalkNotificationMonitor {
     private var fileEventSources: [DispatchSourceFileSystemObject] = []
     private var isPolling = false
     private var shouldPollAgain = false
+    private var lastDiagnosticDetail: String?
     private let pollQueue = DispatchQueue(label: "io.github.mac-desktoppet.notification-monitor", qos: .userInitiated)
 
     init(
@@ -87,33 +88,41 @@ final class KakaoTalkNotificationMonitor {
             self.isPolling = false
 
             DispatchQueue.main.async {
-                guard case let .fingerprints(fingerprints, status) = result else {
-                    self.updateStatus("알림 DB 접근 권한 없음")
+                switch result {
+                case let .accessDenied(sqliteMessage, detail):
+                    let status = NotificationMonitorDiagnostics.userFacingAccessDeniedStatus(sqliteMessage: sqliteMessage)
+                    self.updateStatus(status, detail: detail)
                     if !self.hasReportedAccessDenied {
                         self.hasReportedAccessDenied = true
                         self.onAccessDenied()
                     }
                     return
-                }
 
-                self.hasReportedAccessDenied = false
-                self.updateStatus(status)
+                case let .failed(status, detail):
+                    self.hasReportedAccessDenied = false
+                    self.updateStatus(status, detail: detail)
+                    return
 
-                if self.hasSeededInitialState {
-                    let newFingerprints = fingerprints.filter { !self.seenFingerprints.contains($0) }
-                    let bundleIdentifiers = Set(newFingerprints.compactMap { fingerprint in
-                        fingerprint.split(separator: "|", maxSplits: 1).first.map(String.init)
-                    })
-                    for bundleIdentifier in bundleIdentifiers {
-                        self.onNotification(bundleIdentifier)
+                case let .fingerprints(fingerprints, status, detail):
+                    self.hasReportedAccessDenied = false
+                    self.updateStatus(status, detail: detail)
+
+                    if self.hasSeededInitialState {
+                        let newFingerprints = fingerprints.filter { !self.seenFingerprints.contains($0) }
+                        let bundleIdentifiers = Set(newFingerprints.compactMap { fingerprint in
+                            fingerprint.split(separator: "|", maxSplits: 1).first.map(String.init)
+                        })
+                        for bundleIdentifier in bundleIdentifiers {
+                            self.onNotification(bundleIdentifier)
+                        }
+                    } else {
+                        self.hasSeededInitialState = true
                     }
-                } else {
-                    self.hasSeededInitialState = true
-                }
 
-                self.seenFingerprints.formUnion(fingerprints)
-                if self.seenFingerprints.count > 200 {
-                    self.seenFingerprints = Set(self.seenFingerprints.suffix(80))
+                    self.seenFingerprints.formUnion(fingerprints)
+                    if self.seenFingerprints.count > 200 {
+                        self.seenFingerprints = Set(self.seenFingerprints.suffix(80))
+                    }
                 }
             }
 
@@ -124,28 +133,34 @@ final class KakaoTalkNotificationMonitor {
         }
     }
 
-    private func updateStatus(_ status: String) {
-        guard status != lastStatus else { return }
-        lastStatus = status
-        Self.writeDiagnostic(status)
-        onStatusChanged(status)
+    private func updateStatus(_ status: String, detail: String? = nil) {
+        if status != lastStatus {
+            lastStatus = status
+            Self.writeDiagnostic(status)
+            onStatusChanged(status)
+        }
+
+        guard let detail, detail != lastDiagnosticDetail else { return }
+        lastDiagnosticDetail = detail
+        Self.writeDiagnostic("진단: \(detail)")
     }
 
     private enum PollResult {
-        case fingerprints([String], String)
-        case accessDenied
+        case fingerprints([String], String, String?)
+        case accessDenied(String, String?)
+        case failed(String, String?)
     }
 
     private enum SQLiteResult {
         case rows([String])
-        case accessDenied
-        case failed
+        case accessDenied(String)
+        case failed(String)
     }
 
     private static func latestNotificationFingerprints(targetBundleIdentifiers: [String]) -> PollResult {
         let targets = Array(Set(targetBundleIdentifiers)).filter { !$0.isEmpty }
         guard !targets.isEmpty else {
-            return .fingerprints([], "연결된 앱 없음")
+            return .fingerprints([], "연결된 앱 없음", nil)
         }
 
         if let visibleResult = latestVisibleNotificationFingerprints(targetBundleIdentifiers: targets) {
@@ -159,27 +174,56 @@ final class KakaoTalkNotificationMonitor {
             home.appendingPathComponent("Library/Group Containers/group.com.apple.usernoted/db/db")
         ]
 
+        var failureDetails: [String] = []
+
         for databaseURL in candidates where fileManager.fileExists(atPath: databaseURL.path) {
+            let snapshot = NotificationMonitorDiagnostics.databaseSnapshot(databaseURL: databaseURL)
             switch queryKnownNotificationSchema(databaseURL: databaseURL, targetBundleIdentifiers: targets) {
             case let .rows(rows) where !rows.isEmpty:
-                return .fingerprints(rows, "연결 앱 알림 기록 \(rows.count)개 감지")
-            case .accessDenied:
-                return .accessDenied
+                let detail = NotificationMonitorDiagnostics.querySummary(
+                    targetBundleIdentifiers: targets,
+                    databaseURL: databaseURL,
+                    note: "known-schema rows=\(rows.count)"
+                )
+                return .fingerprints(rows, "연결 앱 알림 기록 \(rows.count)개 감지", detail)
+            case let .accessDenied(detail):
+                return .accessDenied(detail, "\(detail); \(snapshot)")
+            case let .failed(detail):
+                failureDetails.append(detail)
             default:
                 break
             }
 
-            switch queryFallbackNotificationRows(databaseURL: databaseURL, targetBundleIdentifiers: targets) {
+            switch queryNotificationActivityLists(databaseURL: databaseURL, targetBundleIdentifiers: targets) {
             case let .rows(rows) where !rows.isEmpty:
-                return .fingerprints(rows, "연결 앱 알림 흔적 \(rows.count)개 감지")
-            case .accessDenied:
-                return .accessDenied
+                let detail = NotificationMonitorDiagnostics.querySummary(
+                    targetBundleIdentifiers: targets,
+                    databaseURL: databaseURL,
+                    note: "activity-list rows=\(rows.count)"
+                )
+                return .fingerprints(rows, "연결 앱 알림 목록 \(rows.count)개 감지", detail)
+            case let .accessDenied(detail):
+                return .accessDenied(detail, "\(detail); \(snapshot)")
+            case let .failed(detail):
+                failureDetails.append(detail)
             default:
                 break
             }
+
+            failureDetails.append(
+                NotificationMonitorDiagnostics.querySummary(
+                    targetBundleIdentifiers: targets,
+                    databaseURL: databaseURL,
+                    note: "target rows=0"
+                )
+            )
         }
 
-        return .fingerprints([], "알림 DB 접근 가능, 연결 앱 기록 없음")
+        if !failureDetails.isEmpty {
+            return .fingerprints([], "알림 DB 접근 가능, 연결 앱 기록 없음", failureDetails.joined(separator: " | "))
+        }
+
+        return .failed("알림 DB 파일을 찾지 못했어요.", nil)
     }
 
     private static func latestVisibleNotificationFingerprints(targetBundleIdentifiers: [String]) -> PollResult? {
@@ -220,7 +264,7 @@ final class KakaoTalkNotificationMonitor {
         }
 
         guard !matches.isEmpty else { return nil }
-        return .fingerprints(matches, "화면 알림 배너 \(matches.count)개 감지")
+        return .fingerprints(matches, "화면 알림 배너 \(matches.count)개 감지", "accessibility visible rows=\(matches.count)")
     }
 
     private static func visibleTexts(in element: AXUIElement, depth: Int) -> [String] {
@@ -286,7 +330,11 @@ final class KakaoTalkNotificationMonitor {
     }
 
     private static func queryKnownNotificationSchema(databaseURL: URL, targetBundleIdentifiers: [String]) -> SQLiteResult {
-        let tableResult = runSQLite(databaseURL: databaseURL, sql: "SELECT name FROM sqlite_master WHERE type='table';")
+        let tableResult = runSQLite(
+            databaseURL: databaseURL,
+            sql: "SELECT name FROM sqlite_master WHERE type='table';",
+            queryLabel: "schema-tables"
+        )
         guard case let .rows(tableRows) = tableResult else { return tableResult }
 
         let tables = Set(tableRows)
@@ -313,20 +361,24 @@ final class KakaoTalkNotificationMonitor {
         ORDER BY \(dateExpression) DESC
         LIMIT 8;
         """
-        switch runSQLite(databaseURL: databaseURL, sql: sql) {
+        switch runSQLite(databaseURL: databaseURL, sql: sql, queryLabel: "known-schema") {
         case let .rows(rows):
             return .rows(rows.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
-        case .accessDenied:
-            return .accessDenied
-        case .failed:
-            return .failed
+        case let .accessDenied(detail):
+            return .accessDenied(detail)
+        case let .failed(detail):
+            return .failed(detail)
         }
     }
 
     private static func tableColumns(databaseURL: URL, table: String) -> Set<String> {
         let safeTable = table.replacingOccurrences(of: "'", with: "''")
         let sql = "PRAGMA table_info('\(safeTable)');"
-        guard case let .rows(rows) = runSQLite(databaseURL: databaseURL, sql: sql) else { return [] }
+        guard case let .rows(rows) = runSQLite(
+            databaseURL: databaseURL,
+            sql: sql,
+            queryLabel: "table-info-\(table)"
+        ) else { return [] }
         let names = rows.compactMap { row -> String? in
             let parts = row.split(separator: "|", omittingEmptySubsequences: false)
             guard parts.count > 1 else { return nil }
@@ -335,46 +387,52 @@ final class KakaoTalkNotificationMonitor {
         return Set(names)
     }
 
-    private static func queryFallbackNotificationRows(databaseURL: URL, targetBundleIdentifiers: [String]) -> SQLiteResult {
-        let tableResult = runSQLite(databaseURL: databaseURL, sql: "SELECT name FROM sqlite_master WHERE type='table';")
+    private static func queryNotificationActivityLists(databaseURL: URL, targetBundleIdentifiers: [String]) -> SQLiteResult {
+        let tableResult = runSQLite(
+            databaseURL: databaseURL,
+            sql: "SELECT name FROM sqlite_master WHERE type='table';",
+            queryLabel: "activity-schema-tables"
+        )
         guard case let .rows(tables) = tableResult else { return tableResult }
 
-        let targetNeedles = targetBundleIdentifiers.flatMap { bundleIdentifier -> [(bundleIdentifier: String, needle: String)] in
-            let appName = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)?
-                .deletingPathExtension()
-                .lastPathComponent ?? ""
-            var needles = [bundleIdentifier.lowercased(), appName.lowercased()].filter { !$0.isEmpty }
-            if bundleIdentifier.lowercased().contains("kakao") {
-                needles.append("카카오")
-                needles.append("카카오톡")
-                needles.append("kakao")
-            }
-            return needles.map { (bundleIdentifier, $0) }
-        }
+        let tableSet = Set(tables)
+        guard tableSet.contains("app") else { return .rows([]) }
 
         var matches: [String] = []
+        let appColumns = tableColumns(databaseURL: databaseURL, table: "app")
+        guard let appIdentifierColumn = ["identifier", "bundleid", "bundle_id"].first(where: { appColumns.contains($0) }) else {
+            return .rows([])
+        }
 
-        for table in tables.prefix(12) {
+        let escapedTargets = targetBundleIdentifiers
+            .map { "'\($0.lowercased().replacingOccurrences(of: "'", with: "''"))'" }
+            .joined(separator: ",")
+
+        for table in ["delivered", "displayed", "requests"] where tableSet.contains(table) {
+            let columns = tableColumns(databaseURL: databaseURL, table: table)
+            guard columns.contains("app_id"), columns.contains("list") else { continue }
             let safeTable = table.replacingOccurrences(of: "\"", with: "\"\"")
-            let sql = "SELECT * FROM \"\(safeTable)\" LIMIT 40;"
-            let result = runSQLite(databaseURL: databaseURL, sql: sql)
-            if case .accessDenied = result { return .accessDenied }
+            let sql = """
+            SELECT a.\(appIdentifierColumn) || '|activity|\(safeTable)|' || t.rowid || '|' || length(t.list) || '|' || hex(substr(t.list, 1, 16))
+            FROM "\(safeTable)" t
+            LEFT JOIN app a ON t.app_id = a.app_id
+            WHERE lower(a.\(appIdentifierColumn)) IN (\(escapedTargets))
+              AND t.list IS NOT NULL
+              AND length(t.list) > 0
+            ORDER BY t.rowid DESC
+            LIMIT 8;
+            """
+            let result = runSQLite(databaseURL: databaseURL, sql: sql, queryLabel: "activity-list-\(table)")
+            if case let .accessDenied(detail) = result { return .accessDenied(detail) }
+            if case let .failed(detail) = result { return .failed(detail) }
             guard case let .rows(rows) = result else { continue }
-
-            let filteredRows = rows.compactMap { row -> String? in
-                let lowered = row.lowercased()
-                guard let target = targetNeedles.first(where: { lowered.contains($0.needle) }) else {
-                    return nil
-                }
-                return "\(target.bundleIdentifier)|fallback|\(table)|\(row.hashValue)"
-            }
-            matches.append(contentsOf: filteredRows)
+            matches.append(contentsOf: rows)
         }
 
         return .rows(Array(matches.prefix(20)))
     }
 
-    private static func runSQLite(databaseURL: URL, sql: String) -> SQLiteResult {
+    private static func runSQLite(databaseURL: URL, sql: String, queryLabel: String) -> SQLiteResult {
         var database: OpaquePointer?
         let openCode = sqlite3_open_v2(databaseURL.path, &database, SQLITE_OPEN_READONLY, nil)
         defer {
@@ -384,10 +442,18 @@ final class KakaoTalkNotificationMonitor {
         }
 
         guard openCode == SQLITE_OK, let database else {
-            if isAccessDeniedMessage(database.map(sqliteErrorMessage) ?? "") {
-                return .accessDenied
+            let message = database.map(sqliteErrorMessage) ?? "sqlite open failed"
+            let detail = NotificationMonitorDiagnostics.sqliteFailureDetail(
+                stage: "open",
+                code: openCode,
+                message: message,
+                databasePath: databaseURL.path,
+                queryLabel: queryLabel
+            )
+            if NotificationMonitorDiagnostics.isAccessDeniedMessage(message) {
+                return .accessDenied(detail)
             }
-            return .failed
+            return .failed(detail)
         }
 
         var statement: OpaquePointer?
@@ -399,10 +465,18 @@ final class KakaoTalkNotificationMonitor {
         }
 
         guard prepareCode == SQLITE_OK, let statement else {
-            if isAccessDeniedMessage(sqliteErrorMessage(database)) {
-                return .accessDenied
+            let message = sqliteErrorMessage(database)
+            let detail = NotificationMonitorDiagnostics.sqliteFailureDetail(
+                stage: "prepare",
+                code: prepareCode,
+                message: message,
+                databasePath: databaseURL.path,
+                queryLabel: queryLabel
+            )
+            if NotificationMonitorDiagnostics.isAccessDeniedMessage(message) {
+                return .accessDenied(detail)
             }
-            return .failed
+            return .failed(detail)
         }
 
         var rows: [String] = []
@@ -430,26 +504,25 @@ final class KakaoTalkNotificationMonitor {
             case SQLITE_DONE:
                 return .rows(rows)
             default:
-                if isAccessDeniedMessage(sqliteErrorMessage(database)) {
-                    return .accessDenied
+                let message = sqliteErrorMessage(database)
+                let detail = NotificationMonitorDiagnostics.sqliteFailureDetail(
+                    stage: "step",
+                    code: stepCode,
+                    message: message,
+                    databasePath: databaseURL.path,
+                    queryLabel: queryLabel
+                )
+                if NotificationMonitorDiagnostics.isAccessDeniedMessage(message) {
+                    return .accessDenied(detail)
                 }
-                return .failed
+                return .failed(detail)
             }
         }
     }
 
     private static func sqliteErrorMessage(_ database: OpaquePointer) -> String {
         guard let message = sqlite3_errmsg(database) else { return "" }
-        return String(cString: message).lowercased()
-    }
-
-    private static func isAccessDeniedMessage(_ message: String) -> Bool {
-        let lowercased = message.lowercased()
-        return lowercased.contains("authorization denied")
-            || lowercased.contains("not authorized")
-            || lowercased.contains("operation not permitted")
-            || lowercased.contains("permission denied")
-            || lowercased.contains("unable to open database")
+        return String(cString: message)
     }
 
     private static func writeDiagnostic(_ status: String) {
