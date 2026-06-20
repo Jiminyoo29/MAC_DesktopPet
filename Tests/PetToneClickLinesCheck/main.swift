@@ -14,17 +14,17 @@ func containsEmoji(_ text: String) -> Bool {
 }
 
 for tone in PetTone.allCases {
-    let lines = tone.clickLines(name: "토끼", userName: "지민", appName: "KakaoTalk")
+    let lines = tone.clickLines(name: "토끼", userName: "사용자", appName: "KakaoTalk")
     expect(lines.count >= 12, "\(tone.rawValue) should have at least 12 click lines")
     expect(Set(lines).count == lines.count, "\(tone.rawValue) click lines should be unique")
     expect(lines.allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }, "\(tone.rawValue) click lines should not be empty")
     expect(lines.allSatisfy(containsEmoji), "\(tone.rawValue) click lines should always include emoji")
 }
 
-let friendly = Set(PetTone.friendly.clickLines(name: "토끼", userName: "지민", appName: "KakaoTalk"))
-let polite = Set(PetTone.polite.clickLines(name: "토끼", userName: "지민", appName: "KakaoTalk"))
-let cute = Set(PetTone.cute.clickLines(name: "토끼", userName: "지민", appName: "KakaoTalk"))
-let chic = Set(PetTone.chic.clickLines(name: "토끼", userName: "지민", appName: "KakaoTalk"))
+let friendly = Set(PetTone.friendly.clickLines(name: "토끼", userName: "사용자", appName: "KakaoTalk"))
+let polite = Set(PetTone.polite.clickLines(name: "토끼", userName: "사용자", appName: "KakaoTalk"))
+let cute = Set(PetTone.cute.clickLines(name: "토끼", userName: "사용자", appName: "KakaoTalk"))
+let chic = Set(PetTone.chic.clickLines(name: "토끼", userName: "사용자", appName: "KakaoTalk"))
 
 expect(friendly.isDisjoint(with: polite), "friendly and polite click lines should differ")
 expect(friendly.isDisjoint(with: cute), "friendly and cute click lines should differ")

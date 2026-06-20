@@ -10,6 +10,7 @@ class PetViewModel: ObservableObject {
     @Published var petName: String
     @Published var userName: String
     @Published var tone: PetTone
+    @Published var personality: PetPersonality
     @Published var appName: String
     @Published var scale: Double
     @Published var reactionMode: NotificationReactionMode
@@ -19,6 +20,7 @@ class PetViewModel: ObservableObject {
 
     let id: UUID
     private var bundleIdentifier: String
+    private var windowOrigin: WindowOrigin?
     private let onConfigurationChanged: (PetConfiguration) -> Void
     private let onCreatePet: () -> Void
     private let onClosePet: (UUID) -> Void
@@ -33,10 +35,12 @@ class PetViewModel: ObservableObject {
         petName = configuration.name
         userName = configuration.userName
         tone = configuration.tone
+        personality = configuration.personality
         appName = configuration.appName
         bundleIdentifier = configuration.bundleIdentifier
         petImagePath = configuration.imagePath
         scale = configuration.scale
+        windowOrigin = configuration.windowOrigin
         reactionMode = configuration.reactionMode
         showsNotificationContent = configuration.showsNotificationContent
         customNotificationMessage = configuration.customNotificationMessage
@@ -46,7 +50,7 @@ class PetViewModel: ObservableObject {
     }
 
     func tap() {
-        let lines = tone.clickLines(name: petName, userName: userName, appName: appName)
+        let lines = tone.clickLines(name: petName, userName: userName, appName: appName, personality: personality)
         speak(lines.randomElement() ?? tone.line(name: petName, event: .hello))
     }
 
@@ -152,6 +156,12 @@ class PetViewModel: ObservableObject {
         speak(tone.line(name: petName, event: .toneChanged))
     }
 
+    func setPersonality(_ personality: PetPersonality) {
+        self.personality = personality
+        saveConfiguration()
+        speak(tone.line(name: petName, event: .personalityChanged))
+    }
+
     func setReactionMode(_ mode: NotificationReactionMode) {
         reactionMode = mode
         saveConfiguration()
@@ -218,6 +228,26 @@ class PetViewModel: ObservableObject {
             saveConfiguration()
             speak(tone.line(name: petName, event: .appLinked, appName: appName))
         }
+    }
+
+    func setWindowOrigin(_ origin: CGPoint) {
+        windowOrigin = WindowOrigin(point: origin)
+        saveConfiguration()
+    }
+
+    func apply(configuration: PetConfiguration) {
+        petName = configuration.name
+        userName = configuration.userName
+        tone = configuration.tone
+        personality = configuration.personality
+        appName = configuration.appName
+        bundleIdentifier = configuration.bundleIdentifier
+        petImagePath = configuration.imagePath
+        scale = configuration.scale
+        windowOrigin = configuration.windowOrigin
+        reactionMode = configuration.reactionMode
+        showsNotificationContent = configuration.showsNotificationContent
+        customNotificationMessage = configuration.customNotificationMessage
     }
 
     func updateNotificationStatus(_ status: String) {
@@ -289,10 +319,12 @@ class PetViewModel: ObservableObject {
             name: petName,
             userName: userName,
             tone: tone,
+            personality: personality,
             appName: appName,
             bundleIdentifier: bundleIdentifier,
             imagePath: petImagePath,
             scale: scale,
+            windowOrigin: windowOrigin,
             reactionMode: reactionMode,
             showsNotificationContent: showsNotificationContent,
             customNotificationMessage: customNotificationMessage
@@ -378,6 +410,8 @@ class PetViewModel: ObservableObject {
 
     private func speak(_ text: String) {
         dialogue = text
+        let speechID = UUID()
+        latestSpeechID = speechID
         withAnimation(.spring(response: 0.3, dampingFraction: 0.55)) {
             showDialogue = true
             isBouncing = true
@@ -385,8 +419,11 @@ class PetViewModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             withAnimation(.spring()) { self.isBouncing = false }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + SpeechBubbleTiming.displayDuration(for: text)) {
+            guard self.latestSpeechID == speechID else { return }
             withAnimation(.easeOut(duration: 0.25)) { self.showDialogue = false }
         }
     }
+
+    private var latestSpeechID: UUID?
 }

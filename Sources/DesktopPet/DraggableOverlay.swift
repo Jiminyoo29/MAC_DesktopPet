@@ -13,6 +13,10 @@ class PetInteractionView: NSView {
     var onSetPoliteTone: (() -> Void)?
     var onSetCuteTone: (() -> Void)?
     var onSetChicTone: (() -> Void)?
+    var onSetBalancedPersonality: (() -> Void)?
+    var onSetSupportivePersonality: (() -> Void)?
+    var onSetPlayfulPersonality: (() -> Void)?
+    var onSetFocusedPersonality: (() -> Void)?
     var onSetVisibleOnlyMode: (() -> Void)?
     var onSetIncludeHiddenMode: (() -> Void)?
     var onToggleNotificationContent: (() -> Void)?
@@ -24,9 +28,12 @@ class PetInteractionView: NSView {
     var onSetMediumSize: (() -> Void)?
     var onSetLargeSize: (() -> Void)?
     var onSetCustomScale: ((Double) -> Void)?
+    var onWindowMoved: ((CGPoint) -> Void)?
     var currentScale: Double = 1.0
     var currentReactionMode: NotificationReactionMode = .visibleOnly
+    var currentPersonality: PetPersonality = .balanced
     var showsNotificationContent = false
+    var currentAppName = "연결 앱"
     var onCreatePet: (() -> Void)?
     var onClosePet: (() -> Void)?
     var onOpenFullDiskAccessSettings: (() -> Void)?
@@ -47,7 +54,11 @@ class PetInteractionView: NSView {
         window?.performDrag(with: event)
         if let start = startOrigin, let end = window?.frame.origin {
             let moved = hypot(end.x - start.x, end.y - start.y)
-            if moved < 5 { onTap?() }
+            if moved < 5 {
+                onTap?()
+            } else {
+                onWindowMoved?(end)
+            }
         }
     }
 
@@ -60,6 +71,31 @@ class PetInteractionView: NSView {
         let chooseApp = NSMenuItem(title: "연결 앱 바꾸기...", action: #selector(chooseLinkedApp), keyEquivalent: "")
         chooseApp.target = self
         menu.addItem(chooseApp)
+
+        let appActionsMenu = NSMenu()
+        let appName = currentAppName.isEmpty ? "연결 앱" : currentAppName
+
+        let openAction = NSMenuItem(title: "\(appName) 열기", action: #selector(openLinkedApp), keyEquivalent: "")
+        openAction.target = self
+        appActionsMenu.addItem(openAction)
+
+        let testAction = NSMenuItem(title: "\(appName) 테스트 알림", action: #selector(showTestNotification), keyEquivalent: "")
+        testAction.target = self
+        appActionsMenu.addItem(testAction)
+
+        let messageAction = NSMenuItem(title: "\(appName) 알림 문구 바꾸기...", action: #selector(setCustomNotificationMessage), keyEquivalent: "")
+        messageAction.target = self
+        appActionsMenu.addItem(messageAction)
+
+        let relinkAction = NSMenuItem(title: "앱 다시 선택...", action: #selector(chooseLinkedApp), keyEquivalent: "")
+        relinkAction.target = self
+        appActionsMenu.addItem(relinkAction)
+
+        let appActionsItem = NSMenuItem(title: "앱 액션", action: nil, keyEquivalent: "")
+        appActionsItem.submenu = appActionsMenu
+        menu.addItem(appActionsItem)
+
+        menu.addItem(.separator())
 
         let setName = NSMenuItem(title: "이름 바꾸기...", action: #selector(setName), keyEquivalent: "")
         setName.target = self
@@ -89,6 +125,31 @@ class PetInteractionView: NSView {
         let toneItem = NSMenuItem(title: "말투", action: nil, keyEquivalent: "")
         toneItem.submenu = toneMenu
         menu.addItem(toneItem)
+
+        let personalityMenu = NSMenu()
+        let balanced = NSMenuItem(title: "균형형", action: #selector(setBalancedPersonality), keyEquivalent: "")
+        balanced.target = self
+        balanced.state = currentPersonality == .balanced ? .on : .off
+        personalityMenu.addItem(balanced)
+
+        let supportive = NSMenuItem(title: "다정형", action: #selector(setSupportivePersonality), keyEquivalent: "")
+        supportive.target = self
+        supportive.state = currentPersonality == .supportive ? .on : .off
+        personalityMenu.addItem(supportive)
+
+        let playful = NSMenuItem(title: "장난꾸러기", action: #selector(setPlayfulPersonality), keyEquivalent: "")
+        playful.target = self
+        playful.state = currentPersonality == .playful ? .on : .off
+        personalityMenu.addItem(playful)
+
+        let focused = NSMenuItem(title: "집중형", action: #selector(setFocusedPersonality), keyEquivalent: "")
+        focused.target = self
+        focused.state = currentPersonality == .focused ? .on : .off
+        personalityMenu.addItem(focused)
+
+        let personalityItem = NSMenuItem(title: "성격", action: nil, keyEquivalent: "")
+        personalityItem.submenu = personalityMenu
+        menu.addItem(personalityItem)
 
         let reactionMenu = NSMenu()
         let visibleOnly = NSMenuItem(title: "표시된 알림만", action: #selector(setVisibleOnlyMode), keyEquivalent: "")
@@ -212,6 +273,22 @@ class PetInteractionView: NSView {
         onSetChicTone?()
     }
 
+    @objc private func setBalancedPersonality() {
+        onSetBalancedPersonality?()
+    }
+
+    @objc private func setSupportivePersonality() {
+        onSetSupportivePersonality?()
+    }
+
+    @objc private func setPlayfulPersonality() {
+        onSetPlayfulPersonality?()
+    }
+
+    @objc private func setFocusedPersonality() {
+        onSetFocusedPersonality?()
+    }
+
     @objc private func setVisibleOnlyMode() {
         onSetVisibleOnlyMode?()
     }
@@ -289,6 +366,10 @@ struct DraggableOverlay: NSViewRepresentable {
     let onSetPoliteTone: () -> Void
     let onSetCuteTone: () -> Void
     let onSetChicTone: () -> Void
+    let onSetBalancedPersonality: () -> Void
+    let onSetSupportivePersonality: () -> Void
+    let onSetPlayfulPersonality: () -> Void
+    let onSetFocusedPersonality: () -> Void
     let onSetVisibleOnlyMode: () -> Void
     let onSetIncludeHiddenMode: () -> Void
     let onToggleNotificationContent: () -> Void
@@ -300,9 +381,12 @@ struct DraggableOverlay: NSViewRepresentable {
     let onSetMediumSize: () -> Void
     let onSetLargeSize: () -> Void
     let onSetCustomScale: (Double) -> Void
+    let onWindowMoved: (CGPoint) -> Void
     let currentScale: Double
     let currentReactionMode: NotificationReactionMode
+    let currentPersonality: PetPersonality
     let showsNotificationContent: Bool
+    let currentAppName: String
     let onCreatePet: () -> Void
     let onClosePet: () -> Void
     let onOpenFullDiskAccessSettings: () -> Void
@@ -320,6 +404,10 @@ struct DraggableOverlay: NSViewRepresentable {
         v.onSetPoliteTone = onSetPoliteTone
         v.onSetCuteTone = onSetCuteTone
         v.onSetChicTone = onSetChicTone
+        v.onSetBalancedPersonality = onSetBalancedPersonality
+        v.onSetSupportivePersonality = onSetSupportivePersonality
+        v.onSetPlayfulPersonality = onSetPlayfulPersonality
+        v.onSetFocusedPersonality = onSetFocusedPersonality
         v.onSetVisibleOnlyMode = onSetVisibleOnlyMode
         v.onSetIncludeHiddenMode = onSetIncludeHiddenMode
         v.onToggleNotificationContent = onToggleNotificationContent
@@ -331,9 +419,12 @@ struct DraggableOverlay: NSViewRepresentable {
         v.onSetMediumSize = onSetMediumSize
         v.onSetLargeSize = onSetLargeSize
         v.onSetCustomScale = onSetCustomScale
+        v.onWindowMoved = onWindowMoved
         v.currentScale = currentScale
         v.currentReactionMode = currentReactionMode
+        v.currentPersonality = currentPersonality
         v.showsNotificationContent = showsNotificationContent
+        v.currentAppName = currentAppName
         v.onCreatePet = onCreatePet
         v.onClosePet = onClosePet
         v.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings
@@ -351,6 +442,10 @@ struct DraggableOverlay: NSViewRepresentable {
         nsView.onSetPoliteTone = onSetPoliteTone
         nsView.onSetCuteTone = onSetCuteTone
         nsView.onSetChicTone = onSetChicTone
+        nsView.onSetBalancedPersonality = onSetBalancedPersonality
+        nsView.onSetSupportivePersonality = onSetSupportivePersonality
+        nsView.onSetPlayfulPersonality = onSetPlayfulPersonality
+        nsView.onSetFocusedPersonality = onSetFocusedPersonality
         nsView.onSetVisibleOnlyMode = onSetVisibleOnlyMode
         nsView.onSetIncludeHiddenMode = onSetIncludeHiddenMode
         nsView.onToggleNotificationContent = onToggleNotificationContent
@@ -362,9 +457,12 @@ struct DraggableOverlay: NSViewRepresentable {
         nsView.onSetMediumSize = onSetMediumSize
         nsView.onSetLargeSize = onSetLargeSize
         nsView.onSetCustomScale = onSetCustomScale
+        nsView.onWindowMoved = onWindowMoved
         nsView.currentScale = currentScale
         nsView.currentReactionMode = currentReactionMode
+        nsView.currentPersonality = currentPersonality
         nsView.showsNotificationContent = showsNotificationContent
+        nsView.currentAppName = currentAppName
         nsView.onCreatePet = onCreatePet
         nsView.onClosePet = onClosePet
         nsView.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings

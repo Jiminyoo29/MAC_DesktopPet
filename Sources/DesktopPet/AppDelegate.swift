@@ -7,6 +7,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var configurations: [PetConfiguration] = []
     var notificationMonitor: KakaoTalkNotificationMonitor!
     private var statusItem: NSStatusItem?
+    private var settingsWindowController: SettingsWindowController?
+    private var notificationCooldown = NotificationCooldown(interval: 3.0)
     private var petsHidden = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -27,6 +29,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onNotification: { [weak self] event in
                 guard let self else { return }
+                guard self.notificationCooldown.allows(bundleIdentifier: event.bundleIdentifier) else { return }
+
                 let matchedViewModels = self.viewModels.values
                     .filter { $0.matches(bundleIdentifier: event.bundleIdentifier) }
 
@@ -54,10 +58,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func createWindow(for configuration: PetConfiguration, offsetIndex: Int) {
         let screen = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
-        let size = CGSize(width: 160 * configuration.scale, height: 220 * configuration.scale)
-        let origin = CGPoint(
-            x: screen.maxX - size.width - 60 - CGFloat(offsetIndex * 36),
-            y: screen.midY - size.height / 2 - CGFloat(offsetIndex * 30)
+        let size = PetWindowMetrics.size(scale: configuration.scale)
+        let origin = PetWindowPlacement.resolvedOrigin(
+            savedOrigin: configuration.windowOrigin,
+            screen: screen,
+            size: size,
+            offsetIndex: offsetIndex
         )
 
         let window = NSWindow(
@@ -94,7 +100,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModels[configuration.id] = viewModel
     }
 
-    private func addPet() {
+    @discardableResult
+    private func addPet() -> PetConfiguration {
         var configuration = PetConfiguration.defaultPet
         configuration.id = UUID()
         configurations.append(configuration)
@@ -102,6 +109,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         createWindow(for: configuration, offsetIndex: configurations.count - 1)
         petsHidden = false
         refreshStatusMenu()
+        return configuration
     }
 
     private func closePet(id: UUID) {
@@ -129,11 +137,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func resizeWindow(for configuration: PetConfiguration) {
         guard let window = windows[configuration.id] else { return }
-        let size = CGSize(width: 160 * configuration.scale, height: 220 * configuration.scale)
+        let size = PetWindowMetrics.size(scale: configuration.scale)
         var frame = window.frame
         frame.origin.y += frame.height - size.height
         frame.size = size
+        let screen = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        frame.origin = PetWindowPlacement.resolvedOrigin(
+            savedOrigin: WindowOrigin(point: frame.origin),
+            screen: screen,
+            size: size,
+            offsetIndex: 0
+        )
         window.setFrame(frame, display: true, animate: true)
+        rememberWindowOrigin(id: configuration.id, origin: frame.origin)
+    }
+
+    private func rememberWindowOrigin(id: UUID, origin: CGPoint) {
+        guard let index = configurations.firstIndex(where: { $0.id == id }) else { return }
+        configurations[index].windowOrigin = WindowOrigin(point: origin)
+        PetConfigurationStore.save(configurations)
+        viewModels[id]?.apply(configuration: configurations[index])
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -155,6 +178,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let newPet = NSMenuItem(title: "새 펫 만들기", action: #selector(addPetFromMenuBar), keyEquivalent: "")
         newPet.target = self
         menu.addItem(newPet)
+
+        let settings = NSMenuItem(title: "설정 열기", action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
 
         menu.addItem(.separator())
 
@@ -199,6 +226,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         addPet()
     }
 
+    @objc private func openSettings() {
+        showSettingsWindow()
+    }
+
     @objc private func toggleLaunchAtLogin() {
         do {
             try LoginItemController.setEnabled(!LoginItemController.isEnabled)
@@ -218,5 +249,49 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openAccessibilitySettings() {
         OnboardingPresenter.openAccessibilitySettings()
+    }
+
+    private func showSettingsWindow() {
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController(
+                onUpdate: { [weak self] configuration in
+                    self?.applySettingsConfiguration(configuration) ?? []
+                },
+                onAddPet: { [weak self] in
+                    guard let self else { return [] }
+                    self.addPet()
+                    return self.configurations
+                },
+                onChooseApp: { [weak self] id in
+                    guard let self else { return [] }
+                    self.viewModels[id]?.chooseLinkedApp()
+                    if let updated = self.viewModels[id]?.configuration() {
+                        self.updateConfiguration(updated)
+                    }
+                    return self.configurations
+                },
+                onOpenApp: { [weak self] id in
+                    self?.viewModels[id]?.openLinkedApp()
+                }
+            )
+        }
+
+        settingsWindowController?.show(configurations: configurations)
+    }
+
+    private func applySettingsConfiguration(_ configuration: PetConfiguration) -> [PetConfiguration] {
+        var updated = configuration
+        updated.name = normalized(configuration.name, fallback: "토끼")
+        updated.userName = normalized(configuration.userName, fallback: "사용자")
+        updated.scale = min(1.6, max(0.55, configuration.scale))
+        updateConfiguration(updated)
+        viewModels[updated.id]?.apply(configuration: updated)
+        resizeWindow(for: updated)
+        return configurations
+    }
+
+    private func normalized(_ value: String, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
     }
 }

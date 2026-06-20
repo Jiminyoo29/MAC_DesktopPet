@@ -23,6 +23,10 @@ struct PetRootView: View {
                 onSetPoliteTone: { viewModel.setTone(.polite) },
                 onSetCuteTone: { viewModel.setTone(.cute) },
                 onSetChicTone: { viewModel.setTone(.chic) },
+                onSetBalancedPersonality: { viewModel.setPersonality(.balanced) },
+                onSetSupportivePersonality: { viewModel.setPersonality(.supportive) },
+                onSetPlayfulPersonality: { viewModel.setPersonality(.playful) },
+                onSetFocusedPersonality: { viewModel.setPersonality(.focused) },
                 onSetVisibleOnlyMode: { viewModel.setReactionMode(.visibleOnly) },
                 onSetIncludeHiddenMode: { viewModel.setReactionMode(.includeHidden) },
                 onToggleNotificationContent: viewModel.toggleNotificationContent,
@@ -34,9 +38,12 @@ struct PetRootView: View {
                 onSetMediumSize: viewModel.setMediumSize,
                 onSetLargeSize: viewModel.setLargeSize,
                 onSetCustomScale: viewModel.setCustomScale,
+                onWindowMoved: viewModel.setWindowOrigin,
                 currentScale: viewModel.scale,
                 currentReactionMode: viewModel.reactionMode,
+                currentPersonality: viewModel.personality,
                 showsNotificationContent: viewModel.showsNotificationContent,
+                currentAppName: viewModel.appName,
                 onCreatePet: viewModel.createPet,
                 onClosePet: viewModel.closePet,
                 onOpenFullDiskAccessSettings: viewModel.openFullDiskAccessSettings,
@@ -57,18 +64,21 @@ struct PetRootView: View {
                             ))
                     }
                 }
-                .frame(height: 85)
+                .frame(height: 112)
 
                 // 캐릭터
                 PetAvatar(imagePath: viewModel.petImagePath, blink: blink)
                     .offset(y: sin(floatPhase) * 7)
                     .scaleEffect(viewModel.isBouncing ? 1.18 : 1.0)
-                    .frame(width: 160, height: 135)
+                    .frame(width: PetWindowMetrics.baseWidth, height: 138)
             }
-            .frame(width: 160, height: 220)
+            .frame(width: PetWindowMetrics.baseWidth, height: PetWindowMetrics.baseHeight)
         }
         .scaleEffect(viewModel.scale)
-        .frame(width: 160 * viewModel.scale, height: 220 * viewModel.scale)
+        .frame(
+            width: PetWindowMetrics.baseWidth * viewModel.scale,
+            height: PetWindowMetrics.baseHeight * viewModel.scale
+        )
         .onReceive(floatTimer) { _ in floatPhase += 0.042 }
         .onReceive(blinkTimer) { _ in triggerBlink() }
     }
@@ -90,7 +100,11 @@ struct SpeechBubble: View {
                 .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                 .foregroundColor(Color(white: 0.15))
                 .multilineTextAlignment(.center)
+                .lineLimit(5)
+                .truncationMode(.tail)
+                .minimumScaleFactor(0.86)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 170)
                 .padding(.horizontal, 11)
                 .padding(.vertical, 8)
                 .background(
