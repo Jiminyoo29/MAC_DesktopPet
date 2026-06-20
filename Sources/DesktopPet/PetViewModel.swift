@@ -259,7 +259,7 @@ class PetViewModel: ObservableObject {
     }
 
     func matches(bundleIdentifier: String) -> Bool {
-        self.bundleIdentifier == bundleIdentifier
+        self.bundleIdentifier.caseInsensitiveCompare(bundleIdentifier) == .orderedSame
     }
 
     private func setScale(_ value: Double) {

@@ -18,9 +18,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.configurations.map(\.bundleIdentifier) ?? []
             },
             onNotification: { [weak self] bundleIdentifier in
-                self?.viewModels.values
+                guard let self else { return }
+                let matchedViewModels = self.viewModels.values
                     .filter { $0.matches(bundleIdentifier: bundleIdentifier) }
-                    .forEach { $0.showNotification() }
+
+                if matchedViewModels.isEmpty, self.viewModels.count == 1 {
+                    self.viewModels.values.forEach { $0.showNotification() }
+                } else {
+                    matchedViewModels.forEach { $0.showNotification() }
+                }
             },
             onAccessDenied: { [weak self] in
                 self?.viewModels.values.forEach { $0.showNotificationAccessHelp() }
