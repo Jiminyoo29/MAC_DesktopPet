@@ -22,7 +22,7 @@ final class KakaoTalkNotificationMonitor {
     private let pollQueue = DispatchQueue(label: "io.github.mac-desktoppet.notification-monitor", qos: .userInitiated)
 
     init(
-        interval: TimeInterval = 0.2,
+        interval: TimeInterval = NotificationMonitorTiming.watchdogInterval,
         targetBundleIdentifiers: @escaping () -> [String],
         onNotification: @escaping (String) -> Void,
         onAccessDenied: @escaping () -> Void,
