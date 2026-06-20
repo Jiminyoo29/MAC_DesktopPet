@@ -3,6 +3,7 @@ import Foundation
 struct PetConfiguration: Codable, Identifiable, Equatable {
     var id: UUID
     var name: String
+    var userName: String
     var tone: PetTone
     var appName: String
     var bundleIdentifier: String
@@ -12,6 +13,7 @@ struct PetConfiguration: Codable, Identifiable, Equatable {
     init(
         id: UUID,
         name: String,
+        userName: String,
         tone: PetTone,
         appName: String,
         bundleIdentifier: String,
@@ -20,6 +22,7 @@ struct PetConfiguration: Codable, Identifiable, Equatable {
     ) {
         self.id = id
         self.name = name
+        self.userName = userName
         self.tone = tone
         self.appName = appName
         self.bundleIdentifier = bundleIdentifier
@@ -35,12 +38,14 @@ struct PetConfiguration: Codable, Identifiable, Equatable {
         imagePath = try container.decodeIfPresent(String.self, forKey: .imagePath)
         scale = try container.decodeIfPresent(Double.self, forKey: .scale) ?? 1.0
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? "토끼"
+        userName = try container.decodeIfPresent(String.self, forKey: .userName) ?? "사용자"
         tone = try container.decodeIfPresent(PetTone.self, forKey: .tone) ?? .friendly
     }
 
     static let defaultPet = PetConfiguration(
         id: UUID(),
         name: "토끼",
+        userName: "사용자",
         tone: .friendly,
         appName: "KakaoTalk",
         bundleIdentifier: "com.kakao.KakaoTalkMac",

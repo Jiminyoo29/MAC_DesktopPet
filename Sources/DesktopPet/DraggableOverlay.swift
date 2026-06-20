@@ -8,6 +8,7 @@ class PetInteractionView: NSView {
     var onTap: (() -> Void)?
     var onDoubleClick: (() -> Void)?
     var onSetName: (() -> Void)?
+    var onSetUserName: (() -> Void)?
     var onSetFriendlyTone: (() -> Void)?
     var onSetPoliteTone: (() -> Void)?
     var onSetCuteTone: (() -> Void)?
@@ -18,6 +19,8 @@ class PetInteractionView: NSView {
     var onSetSmallSize: (() -> Void)?
     var onSetMediumSize: (() -> Void)?
     var onSetLargeSize: (() -> Void)?
+    var onSetCustomScale: ((Double) -> Void)?
+    var currentScale: Double = 1.0
     var onCreatePet: (() -> Void)?
     var onClosePet: (() -> Void)?
     var onOpenFullDiskAccessSettings: (() -> Void)?
@@ -56,6 +59,10 @@ class PetInteractionView: NSView {
         setName.target = self
         menu.addItem(setName)
 
+        let setUserName = NSMenuItem(title: "사용자 호칭 바꾸기...", action: #selector(setUserName), keyEquivalent: "")
+        setUserName.target = self
+        menu.addItem(setUserName)
+
         let toneMenu = NSMenu()
         let friendly = NSMenuItem(title: "기본", action: #selector(setFriendlyTone), keyEquivalent: "")
         friendly.target = self
@@ -88,6 +95,15 @@ class PetInteractionView: NSView {
         menu.addItem(.separator())
 
         let sizeMenu = NSMenu()
+        let slider = NSSlider(value: currentScale, minValue: 0.55, maxValue: 1.6, target: self, action: #selector(sizeSliderChanged(_:)))
+        slider.frame = NSRect(x: 0, y: 0, width: 180, height: 28)
+        slider.isContinuous = true
+        let sliderItem = NSMenuItem()
+        sliderItem.view = slider
+        sizeMenu.addItem(sliderItem)
+
+        sizeMenu.addItem(.separator())
+
         let small = NSMenuItem(title: "작게", action: #selector(setSmallSize), keyEquivalent: "")
         small.target = self
         sizeMenu.addItem(small)
@@ -146,6 +162,10 @@ class PetInteractionView: NSView {
         onSetName?()
     }
 
+    @objc private func setUserName() {
+        onSetUserName?()
+    }
+
     @objc private func setFriendlyTone() {
         onSetFriendlyTone?()
     }
@@ -182,6 +202,10 @@ class PetInteractionView: NSView {
         onSetLargeSize?()
     }
 
+    @objc private func sizeSliderChanged(_ sender: NSSlider) {
+        onSetCustomScale?(sender.doubleValue)
+    }
+
     @objc private func createPet() {
         onCreatePet?()
     }
@@ -214,6 +238,7 @@ struct DraggableOverlay: NSViewRepresentable {
     let onTap: () -> Void
     let onDoubleClick: () -> Void
     let onSetName: () -> Void
+    let onSetUserName: () -> Void
     let onSetFriendlyTone: () -> Void
     let onSetPoliteTone: () -> Void
     let onSetCuteTone: () -> Void
@@ -224,6 +249,8 @@ struct DraggableOverlay: NSViewRepresentable {
     let onSetSmallSize: () -> Void
     let onSetMediumSize: () -> Void
     let onSetLargeSize: () -> Void
+    let onSetCustomScale: (Double) -> Void
+    let currentScale: Double
     let onCreatePet: () -> Void
     let onClosePet: () -> Void
     let onOpenFullDiskAccessSettings: () -> Void
@@ -236,6 +263,7 @@ struct DraggableOverlay: NSViewRepresentable {
         v.onTap = onTap
         v.onDoubleClick = onDoubleClick
         v.onSetName = onSetName
+        v.onSetUserName = onSetUserName
         v.onSetFriendlyTone = onSetFriendlyTone
         v.onSetPoliteTone = onSetPoliteTone
         v.onSetCuteTone = onSetCuteTone
@@ -246,6 +274,8 @@ struct DraggableOverlay: NSViewRepresentable {
         v.onSetSmallSize = onSetSmallSize
         v.onSetMediumSize = onSetMediumSize
         v.onSetLargeSize = onSetLargeSize
+        v.onSetCustomScale = onSetCustomScale
+        v.currentScale = currentScale
         v.onCreatePet = onCreatePet
         v.onClosePet = onClosePet
         v.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings
@@ -258,6 +288,7 @@ struct DraggableOverlay: NSViewRepresentable {
         nsView.onTap = onTap
         nsView.onDoubleClick = onDoubleClick
         nsView.onSetName = onSetName
+        nsView.onSetUserName = onSetUserName
         nsView.onSetFriendlyTone = onSetFriendlyTone
         nsView.onSetPoliteTone = onSetPoliteTone
         nsView.onSetCuteTone = onSetCuteTone
@@ -268,6 +299,8 @@ struct DraggableOverlay: NSViewRepresentable {
         nsView.onSetSmallSize = onSetSmallSize
         nsView.onSetMediumSize = onSetMediumSize
         nsView.onSetLargeSize = onSetLargeSize
+        nsView.onSetCustomScale = onSetCustomScale
+        nsView.currentScale = currentScale
         nsView.onCreatePet = onCreatePet
         nsView.onClosePet = onClosePet
         nsView.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings

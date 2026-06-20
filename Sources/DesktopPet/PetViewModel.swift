@@ -8,6 +8,7 @@ class PetViewModel: ObservableObject {
     @Published var isBouncing = false
     @Published var petImagePath: String?
     @Published var petName: String
+    @Published var userName: String
     @Published var tone: PetTone
     @Published var appName: String
     @Published var scale: Double
@@ -43,6 +44,7 @@ class PetViewModel: ObservableObject {
     ) {
         id = configuration.id
         petName = configuration.name
+        userName = configuration.userName
         tone = configuration.tone
         appName = configuration.appName
         bundleIdentifier = configuration.bundleIdentifier
@@ -69,7 +71,7 @@ class PetViewModel: ObservableObject {
     }
 
     func showNotification() {
-        speak(tone.line(name: petName, event: .notification, appName: appName))
+        speak(notificationLine())
     }
 
     func showTestNotification() {
@@ -99,6 +101,10 @@ class PetViewModel: ObservableObject {
         speak(tone.line(name: petName, event: .large))
     }
 
+    func setCustomScale(_ value: Double) {
+        setScale(min(1.6, max(0.55, value)))
+    }
+
     func setName() {
         let alert = NSAlert()
         alert.messageText = "펫 이름"
@@ -119,6 +125,29 @@ class PetViewModel: ObservableObject {
             petName = trimmed
             saveConfiguration()
             speak(tone.line(name: petName, event: .nameChanged))
+        }
+    }
+
+    func setUserName() {
+        let alert = NSAlert()
+        alert.messageText = "사용자 호칭"
+        alert.informativeText = "펫이 사용자를 뭐라고 부르면 좋을까요?"
+        alert.addButton(withTitle: "저장")
+        alert.addButton(withTitle: "취소")
+
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        input.stringValue = userName
+        alert.accessoryView = input
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            let trimmed = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                speak("호칭을 입력해 주세요.")
+                return
+            }
+            userName = trimmed
+            saveConfiguration()
+            speak("\(formattedUserName())! 이렇게 불러드릴게요.")
         }
     }
 
@@ -220,6 +249,7 @@ class PetViewModel: ObservableObject {
         PetConfiguration(
             id: id,
             name: petName,
+            userName: userName,
             tone: tone,
             appName: appName,
             bundleIdentifier: bundleIdentifier,
@@ -239,6 +269,55 @@ class PetViewModel: ObservableObject {
 
     private func saveConfiguration() {
         onConfigurationChanged(configuration())
+    }
+
+    private func formattedUserName() -> String {
+        if userName.hasSuffix("님") || userName.hasSuffix("씨") {
+            return userName
+        }
+        return "\(userName)님"
+    }
+
+    private func notificationLine() -> String {
+        let user = formattedUserName()
+        let message = appSpecificNotificationMessage()
+
+        switch tone {
+        case .friendly:
+            return "\(user)! \(message)"
+        case .polite:
+            return "\(user), \(message)"
+        case .cute:
+            return "\(user)! \(message)용"
+        case .chic:
+            return "\(user). \(message)"
+        }
+    }
+
+    private func appSpecificNotificationMessage() -> String {
+        let loweredBundle = bundleIdentifier.lowercased()
+        let loweredName = appName.lowercased()
+
+        if loweredBundle.contains("kakao") || loweredName.contains("kakao") || appName.contains("카카오") {
+            return "카톡이 왔어요"
+        }
+        if loweredBundle.contains("calendar") || loweredName.contains("calendar") || appName.contains("캘린더") {
+            return "오늘 일정이 있어요"
+        }
+        if loweredBundle.contains("mail") || loweredName.contains("mail") || appName.contains("메일") {
+            return "메일이 왔어요"
+        }
+        if loweredBundle.contains("slack") || loweredName.contains("slack") {
+            return "Slack 알림이 왔어요"
+        }
+        if loweredBundle.contains("discord") || loweredName.contains("discord") {
+            return "Discord 알림이 왔어요"
+        }
+        if loweredBundle.contains("reminder") || loweredName.contains("reminder") || appName.contains("미리 알림") {
+            return "할 일이 있어요"
+        }
+
+        return "\(appName) 알림이 왔어요"
     }
 
     private func speak(_ text: String) {
