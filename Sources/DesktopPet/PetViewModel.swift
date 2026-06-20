@@ -12,6 +12,9 @@ class PetViewModel: ObservableObject {
     @Published var tone: PetTone
     @Published var appName: String
     @Published var scale: Double
+    @Published var reactionMode: NotificationReactionMode
+    @Published var showsNotificationContent: Bool
+    @Published var customNotificationMessage: String?
     private(set) var notificationStatus = "알림 감지 준비 중"
 
     let id: UUID
@@ -50,6 +53,9 @@ class PetViewModel: ObservableObject {
         bundleIdentifier = configuration.bundleIdentifier
         petImagePath = configuration.imagePath
         scale = configuration.scale
+        reactionMode = configuration.reactionMode
+        showsNotificationContent = configuration.showsNotificationContent
+        customNotificationMessage = configuration.customNotificationMessage
         self.onConfigurationChanged = onConfigurationChanged
         self.onCreatePet = onCreatePet
         self.onClosePet = onClosePet
@@ -70,7 +76,14 @@ class PetViewModel: ObservableObject {
         }
     }
 
-    func showNotification() {
+    func showNotification(content: String? = nil) {
+        if showsNotificationContent,
+           let content = content?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !content.isEmpty {
+            speak(content)
+            return
+        }
+
         speak(notificationLine())
     }
 
@@ -155,6 +168,49 @@ class PetViewModel: ObservableObject {
         self.tone = tone
         saveConfiguration()
         speak(tone.line(name: petName, event: .toneChanged))
+    }
+
+    func setReactionMode(_ mode: NotificationReactionMode) {
+        reactionMode = mode
+        saveConfiguration()
+        switch mode {
+        case .visibleOnly:
+            speak("표시된 알림에만 반응할게요.")
+        case .includeHidden:
+            speak("숨겨진 알림 기록에도 반응할게요.")
+        }
+    }
+
+    func toggleNotificationContent() {
+        showsNotificationContent.toggle()
+        saveConfiguration()
+        speak(showsNotificationContent ? "알림에 뜬 내용을 그대로 보여줄게요." : "알림 내용은 숨길게요.")
+    }
+
+    func setCustomNotificationMessage() {
+        let alert = NSAlert()
+        alert.messageText = "알림 문구"
+        alert.informativeText = "알림 내용 표시가 꺼져 있을 때 보여줄 문구를 입력해 주세요."
+        alert.addButton(withTitle: "저장")
+        alert.addButton(withTitle: "기본값")
+        alert.addButton(withTitle: "취소")
+
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        input.placeholderString = "\(formattedUserName())! \(appName) 알림이 왔어요"
+        input.stringValue = customNotificationMessage ?? ""
+        alert.accessoryView = input
+
+        let result = alert.runModal()
+        if result == .alertFirstButtonReturn {
+            let trimmed = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            customNotificationMessage = trimmed.isEmpty ? nil : trimmed
+            saveConfiguration()
+            speak(customNotificationMessage ?? "기본 알림 문구를 사용할게요.")
+        } else if result == .alertSecondButtonReturn {
+            customNotificationMessage = nil
+            saveConfiguration()
+            speak("기본 알림 문구로 돌아갈게요.")
+        }
     }
 
     func chooseLinkedApp() {
@@ -254,12 +310,23 @@ class PetViewModel: ObservableObject {
             appName: appName,
             bundleIdentifier: bundleIdentifier,
             imagePath: petImagePath,
-            scale: scale
+            scale: scale,
+            reactionMode: reactionMode,
+            showsNotificationContent: showsNotificationContent,
+            customNotificationMessage: customNotificationMessage
         )
     }
 
     func matches(bundleIdentifier: String) -> Bool {
         self.bundleIdentifier.caseInsensitiveCompare(bundleIdentifier) == .orderedSame
+    }
+
+    func notificationTarget() -> NotificationMonitorTarget {
+        NotificationMonitorTarget(
+            bundleIdentifier: bundleIdentifier,
+            reactionMode: reactionMode,
+            showsNotificationContent: showsNotificationContent
+        )
     }
 
     private func setScale(_ value: Double) {
@@ -279,6 +346,13 @@ class PetViewModel: ObservableObject {
     }
 
     private func notificationLine() -> String {
+        if let custom = customNotificationMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !custom.isEmpty {
+            return custom
+                .replacingOccurrences(of: "{user}", with: formattedUserName())
+                .replacingOccurrences(of: "{app}", with: appName)
+        }
+
         let user = formattedUserName()
         let message = appSpecificNotificationMessage()
 

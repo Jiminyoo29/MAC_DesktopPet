@@ -6,8 +6,8 @@ import ApplicationServices
 
 final class KakaoTalkNotificationMonitor {
     private let interval: TimeInterval
-    private let targetBundleIdentifiers: () -> [String]
-    private let onNotification: (String) -> Void
+    private let targetConfigurations: () -> [NotificationMonitorTarget]
+    private let onNotification: (NotificationMonitorEvent) -> Void
     private let onAccessDenied: () -> Void
     private let onStatusChanged: (String) -> Void
     private var timer: Timer?
@@ -23,13 +23,13 @@ final class KakaoTalkNotificationMonitor {
 
     init(
         interval: TimeInterval = NotificationMonitorTiming.watchdogInterval,
-        targetBundleIdentifiers: @escaping () -> [String],
-        onNotification: @escaping (String) -> Void,
+        targetConfigurations: @escaping () -> [NotificationMonitorTarget],
+        onNotification: @escaping (NotificationMonitorEvent) -> Void,
         onAccessDenied: @escaping () -> Void,
         onStatusChanged: @escaping (String) -> Void
     ) {
         self.interval = interval
-        self.targetBundleIdentifiers = targetBundleIdentifiers
+        self.targetConfigurations = targetConfigurations
         self.onNotification = onNotification
         self.onAccessDenied = onAccessDenied
         self.onStatusChanged = onStatusChanged
@@ -83,8 +83,8 @@ final class KakaoTalkNotificationMonitor {
             }
 
             self.isPolling = true
-            let targets = self.targetBundleIdentifiers()
-            let result = Self.latestNotificationFingerprints(targetBundleIdentifiers: targets)
+            let targets = self.targetConfigurations()
+            let result = Self.latestNotificationEvents(targetConfigurations: targets)
             self.isPolling = false
 
             DispatchQueue.main.async {
@@ -103,23 +103,25 @@ final class KakaoTalkNotificationMonitor {
                     self.updateStatus(status, detail: detail)
                     return
 
-                case let .fingerprints(fingerprints, status, detail):
+                case let .records(records, status, detail):
                     self.hasReportedAccessDenied = false
                     self.updateStatus(status, detail: detail)
 
                     if self.hasSeededInitialState {
-                        let newFingerprints = fingerprints.filter { !self.seenFingerprints.contains($0) }
-                        let bundleIdentifiers = Set(newFingerprints.compactMap { fingerprint in
-                            fingerprint.split(separator: "|", maxSplits: 1).first.map(String.init)
-                        })
-                        for bundleIdentifier in bundleIdentifiers {
-                            self.onNotification(bundleIdentifier)
+                        let newRecords = records.filter { !self.seenFingerprints.contains($0.fingerprint) }
+                        for record in newRecords {
+                            self.onNotification(
+                                NotificationMonitorEvent(
+                                    bundleIdentifier: record.bundleIdentifier,
+                                    content: record.content
+                                )
+                            )
                         }
                     } else {
                         self.hasSeededInitialState = true
                     }
 
-                    self.seenFingerprints.formUnion(fingerprints)
+                    self.seenFingerprints.formUnion(records.map(\.fingerprint))
                     if self.seenFingerprints.count > 200 {
                         self.seenFingerprints = Set(self.seenFingerprints.suffix(80))
                     }
@@ -146,9 +148,15 @@ final class KakaoTalkNotificationMonitor {
     }
 
     private enum PollResult {
-        case fingerprints([String], String, String?)
+        case records([NotificationRecord], String, String?)
         case accessDenied(String, String?)
         case failed(String, String?)
+    }
+
+    private struct NotificationRecord {
+        let fingerprint: String
+        let bundleIdentifier: String
+        let content: String?
     }
 
     private enum SQLiteResult {
@@ -157,13 +165,13 @@ final class KakaoTalkNotificationMonitor {
         case failed(String)
     }
 
-    private static func latestNotificationFingerprints(targetBundleIdentifiers: [String]) -> PollResult {
-        let targets = Array(Set(targetBundleIdentifiers)).filter { !$0.isEmpty }
+    private static func latestNotificationEvents(targetConfigurations: [NotificationMonitorTarget]) -> PollResult {
+        let targets = deduplicatedTargets(targetConfigurations)
         guard !targets.isEmpty else {
-            return .fingerprints([], "연결된 앱 없음", nil)
+            return .records([], "연결된 앱 없음", nil)
         }
 
-        if let visibleResult = latestVisibleNotificationFingerprints(targetBundleIdentifiers: targets) {
+        if let visibleResult = latestVisibleNotificationFingerprints(targetConfigurations: targets) {
             return visibleResult
         }
 
@@ -178,14 +186,15 @@ final class KakaoTalkNotificationMonitor {
 
         for databaseURL in candidates where fileManager.fileExists(atPath: databaseURL.path) {
             let snapshot = NotificationMonitorDiagnostics.databaseSnapshot(databaseURL: databaseURL)
-            switch queryKnownNotificationSchema(databaseURL: databaseURL, targetBundleIdentifiers: targets) {
+            switch queryKnownNotificationSchema(databaseURL: databaseURL, targetConfigurations: targets) {
             case let .rows(rows) where !rows.isEmpty:
+                let records = notificationRecords(from: rows)
                 let detail = NotificationMonitorDiagnostics.querySummary(
-                    targetBundleIdentifiers: targets,
+                    targetBundleIdentifiers: targets.map(\.bundleIdentifier),
                     databaseURL: databaseURL,
                     note: "known-schema rows=\(rows.count)"
                 )
-                return .fingerprints(rows, "연결 앱 알림 기록 \(rows.count)개 감지", detail)
+                return .records(records, "연결 앱 알림 기록 \(records.count)개 감지", detail)
             case let .accessDenied(detail):
                 return .accessDenied(detail, "\(detail); \(snapshot)")
             case let .failed(detail):
@@ -194,14 +203,15 @@ final class KakaoTalkNotificationMonitor {
                 break
             }
 
-            switch queryNotificationActivityLists(databaseURL: databaseURL, targetBundleIdentifiers: targets) {
+            switch queryNotificationActivityLists(databaseURL: databaseURL, targetConfigurations: targets) {
             case let .rows(rows) where !rows.isEmpty:
+                let records = notificationRecords(from: rows)
                 let detail = NotificationMonitorDiagnostics.querySummary(
-                    targetBundleIdentifiers: targets,
+                    targetBundleIdentifiers: targets.map(\.bundleIdentifier),
                     databaseURL: databaseURL,
                     note: "activity-list rows=\(rows.count)"
                 )
-                return .fingerprints(rows, "연결 앱 알림 목록 \(rows.count)개 감지", detail)
+                return .records(records, "연결 앱 알림 목록 \(records.count)개 감지", detail)
             case let .accessDenied(detail):
                 return .accessDenied(detail, "\(detail); \(snapshot)")
             case let .failed(detail):
@@ -212,7 +222,7 @@ final class KakaoTalkNotificationMonitor {
 
             failureDetails.append(
                 NotificationMonitorDiagnostics.querySummary(
-                    targetBundleIdentifiers: targets,
+                    targetBundleIdentifiers: targets.map(\.bundleIdentifier),
                     databaseURL: databaseURL,
                     note: "target rows=0"
                 )
@@ -220,15 +230,16 @@ final class KakaoTalkNotificationMonitor {
         }
 
         if !failureDetails.isEmpty {
-            return .fingerprints([], "알림 DB 접근 가능, 연결 앱 기록 없음", failureDetails.joined(separator: " | "))
+            return .records([], "알림 DB 접근 가능, 연결 앱 기록 없음", failureDetails.joined(separator: " | "))
         }
 
         return .failed("알림 DB 파일을 찾지 못했어요.", nil)
     }
 
-    private static func latestVisibleNotificationFingerprints(targetBundleIdentifiers: [String]) -> PollResult? {
+    private static func latestVisibleNotificationFingerprints(targetConfigurations: [NotificationMonitorTarget]) -> PollResult? {
         guard AXIsProcessTrusted() else { return nil }
-        let targetNames = targetBundleIdentifiers.flatMap { bundleIdentifier -> [(String, String)] in
+        let targetNames = targetConfigurations.flatMap { target -> [(NotificationMonitorTarget, String)] in
+            let bundleIdentifier = target.bundleIdentifier
             let appName = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)?
                 .deletingPathExtension()
                 .lastPathComponent
@@ -239,7 +250,7 @@ final class KakaoTalkNotificationMonitor {
                 names.append("카카오톡")
                 names.append("kakao")
             }
-            return names.map { (bundleIdentifier, $0) }
+            return names.map { (target, $0) }
         }
 
         let notificationCenterApps = NSWorkspace.shared.runningApplications.filter { app in
@@ -250,21 +261,88 @@ final class KakaoTalkNotificationMonitor {
                 || bundleIdentifier.contains("usernoted")
         }
 
-        var matches: [String] = []
+        var matches: [NotificationRecord] = []
 
         for app in notificationCenterApps {
             let appElement = AXUIElementCreateApplication(app.processIdentifier)
-            let texts = visibleTexts(in: appElement, depth: 0)
-            for text in texts {
-                let lowercased = text.lowercased()
-                if let target = targetNames.first(where: { lowercased.contains($0.1) }) {
-                    matches.append("\(target.0)|visible|\(text.hashValue)")
+            let textGroups = visibleTextGroups(in: appElement)
+            for texts in textGroups {
+                let content = notificationContent(from: texts)
+                let lowercased = content.lowercased()
+                guard let target = targetNames.first(where: { lowercased.contains($0.1) }) else {
+                    continue
                 }
+                let targetConfiguration = target.0
+                matches.append(
+                    NotificationRecord(
+                        fingerprint: "\(targetConfiguration.bundleIdentifier)|visible|\(content.hashValue)",
+                        bundleIdentifier: targetConfiguration.bundleIdentifier,
+                        content: targetConfiguration.showsNotificationContent ? content : nil
+                    )
+                )
             }
         }
 
         guard !matches.isEmpty else { return nil }
-        return .fingerprints(matches, "화면 알림 배너 \(matches.count)개 감지", "accessibility visible rows=\(matches.count)")
+        return .records(matches, "화면 알림 배너 \(matches.count)개 감지", "accessibility visible rows=\(matches.count)")
+    }
+
+    private static func deduplicatedTargets(_ targets: [NotificationMonitorTarget]) -> [NotificationMonitorTarget] {
+        var byIdentifier: [String: NotificationMonitorTarget] = [:]
+        for target in targets where !target.bundleIdentifier.isEmpty {
+            let key = target.normalizedBundleIdentifier
+            if let existing = byIdentifier[key] {
+                let reactionMode: NotificationReactionMode = (
+                    existing.reactionMode == .includeHidden || target.reactionMode == .includeHidden
+                ) ? .includeHidden : .visibleOnly
+                byIdentifier[key] = NotificationMonitorTarget(
+                    bundleIdentifier: existing.bundleIdentifier,
+                    reactionMode: reactionMode,
+                    showsNotificationContent: existing.showsNotificationContent || target.showsNotificationContent
+                )
+            } else {
+                byIdentifier[key] = target
+            }
+        }
+        return Array(byIdentifier.values)
+    }
+
+    private static func notificationRecords(from rows: [String]) -> [NotificationRecord] {
+        rows.compactMap { row in
+            let parts = row.split(separator: "|", omittingEmptySubsequences: false)
+            guard let first = parts.first else { return nil }
+            let bundleIdentifier = String(first)
+            return NotificationRecord(
+                fingerprint: row,
+                bundleIdentifier: bundleIdentifier,
+                content: nil
+            )
+        }
+    }
+
+    private static func visibleTextGroups(in element: AXUIElement) -> [[String]] {
+        var roots: [AXUIElement] = []
+        var windowsValue: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXWindowsAttribute as CFString, &windowsValue) == .success,
+           let windows = windowsValue as? [AXUIElement],
+           !windows.isEmpty {
+            roots = windows
+        } else {
+            roots = [element]
+        }
+
+        return roots.map { visibleTexts(in: $0, depth: 0) }.filter { !$0.isEmpty }
+    }
+
+    private static func notificationContent(from texts: [String]) -> String {
+        var seen = Set<String>()
+        let lines = texts.compactMap { text -> String? in
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !seen.contains(trimmed) else { return nil }
+            seen.insert(trimmed)
+            return trimmed
+        }
+        return lines.joined(separator: "\n")
     }
 
     private static func visibleTexts(in element: AXUIElement, depth: Int) -> [String] {
@@ -329,7 +407,7 @@ final class KakaoTalkNotificationMonitor {
         return urls.filter { FileManager.default.fileExists(atPath: $0.path) }
     }
 
-    private static func queryKnownNotificationSchema(databaseURL: URL, targetBundleIdentifiers: [String]) -> SQLiteResult {
+    private static func queryKnownNotificationSchema(databaseURL: URL, targetConfigurations: [NotificationMonitorTarget]) -> SQLiteResult {
         let tableResult = runSQLite(
             databaseURL: databaseURL,
             sql: "SELECT name FROM sqlite_master WHERE type='table';",
@@ -349,12 +427,16 @@ final class KakaoTalkNotificationMonitor {
 
         let dateColumn = ["delivered_date", "presented_date", "date"].first { recordColumns.contains($0) }
         let dateExpression = dateColumn.map { "r.\($0)" } ?? "0"
-        let escapedTargets = targetBundleIdentifiers
-            .map { "'\($0.lowercased().replacingOccurrences(of: "'", with: "''"))'" }
+        let targetByIdentifier = Dictionary(
+            uniqueKeysWithValues: targetConfigurations.map { ($0.normalizedBundleIdentifier, $0) }
+        )
+        let escapedTargets = targetConfigurations
+            .map { "'\($0.normalizedBundleIdentifier.replacingOccurrences(of: "'", with: "''"))'" }
             .joined(separator: ",")
+        let presentedExpression = recordColumns.contains("presented") ? "r.presented" : "1"
 
         let sql = """
-        SELECT a.\(appIdentifierColumn) || '|' || r.rowid || '|' || \(dateExpression)
+        SELECT lower(a.\(appIdentifierColumn)) || '|' || r.rowid || '|' || \(dateExpression) || '|' || \(presentedExpression)
         FROM record r
         LEFT JOIN app a ON r.app_id = a.app_id
         WHERE lower(a.\(appIdentifierColumn)) IN (\(escapedTargets))
@@ -363,7 +445,17 @@ final class KakaoTalkNotificationMonitor {
         """
         switch runSQLite(databaseURL: databaseURL, sql: sql, queryLabel: "known-schema") {
         case let .rows(rows):
-            return .rows(rows.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+            let filteredRows = rows.filter { row in
+                let parts = row.split(separator: "|", omittingEmptySubsequences: false)
+                guard let bundle = parts.first else { return false }
+                let target = targetByIdentifier[String(bundle)]
+                let presentedValue = parts.count > 3 ? String(parts[3]) : nil
+                return NotificationMonitorPolicy.includesRecord(
+                    reactionMode: target?.reactionMode ?? .visibleOnly,
+                    presentedValue: presentedValue
+                )
+            }
+            return .rows(filteredRows.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
         case let .accessDenied(detail):
             return .accessDenied(detail)
         case let .failed(detail):
@@ -387,7 +479,10 @@ final class KakaoTalkNotificationMonitor {
         return Set(names)
     }
 
-    private static func queryNotificationActivityLists(databaseURL: URL, targetBundleIdentifiers: [String]) -> SQLiteResult {
+    private static func queryNotificationActivityLists(databaseURL: URL, targetConfigurations: [NotificationMonitorTarget]) -> SQLiteResult {
+        let hiddenTargets = targetConfigurations.filter { $0.reactionMode == .includeHidden }
+        guard !hiddenTargets.isEmpty else { return .rows([]) }
+
         let tableResult = runSQLite(
             databaseURL: databaseURL,
             sql: "SELECT name FROM sqlite_master WHERE type='table';",
@@ -404,8 +499,8 @@ final class KakaoTalkNotificationMonitor {
             return .rows([])
         }
 
-        let escapedTargets = targetBundleIdentifiers
-            .map { "'\($0.lowercased().replacingOccurrences(of: "'", with: "''"))'" }
+        let escapedTargets = hiddenTargets
+            .map { "'\($0.normalizedBundleIdentifier.replacingOccurrences(of: "'", with: "''"))'" }
             .joined(separator: ",")
 
         for table in ["delivered", "displayed", "requests"] where tableSet.contains(table) {

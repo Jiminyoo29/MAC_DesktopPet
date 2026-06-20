@@ -9,6 +9,9 @@ struct PetConfiguration: Codable, Identifiable, Equatable {
     var bundleIdentifier: String
     var imagePath: String?
     var scale: Double
+    var reactionMode: NotificationReactionMode
+    var showsNotificationContent: Bool
+    var customNotificationMessage: String?
 
     init(
         id: UUID,
@@ -18,7 +21,10 @@ struct PetConfiguration: Codable, Identifiable, Equatable {
         appName: String,
         bundleIdentifier: String,
         imagePath: String?,
-        scale: Double
+        scale: Double,
+        reactionMode: NotificationReactionMode,
+        showsNotificationContent: Bool,
+        customNotificationMessage: String?
     ) {
         self.id = id
         self.name = name
@@ -28,6 +34,9 @@ struct PetConfiguration: Codable, Identifiable, Equatable {
         self.bundleIdentifier = bundleIdentifier
         self.imagePath = imagePath
         self.scale = scale
+        self.reactionMode = reactionMode
+        self.showsNotificationContent = showsNotificationContent
+        self.customNotificationMessage = customNotificationMessage
     }
 
     init(from decoder: Decoder) throws {
@@ -40,6 +49,9 @@ struct PetConfiguration: Codable, Identifiable, Equatable {
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? "토끼"
         userName = try container.decodeIfPresent(String.self, forKey: .userName) ?? "사용자"
         tone = try container.decodeIfPresent(PetTone.self, forKey: .tone) ?? .friendly
+        reactionMode = try container.decodeIfPresent(NotificationReactionMode.self, forKey: .reactionMode) ?? .visibleOnly
+        showsNotificationContent = try container.decodeIfPresent(Bool.self, forKey: .showsNotificationContent) ?? false
+        customNotificationMessage = try container.decodeIfPresent(String.self, forKey: .customNotificationMessage)
     }
 
     static let defaultPet = PetConfiguration(
@@ -50,7 +62,10 @@ struct PetConfiguration: Codable, Identifiable, Equatable {
         appName: "KakaoTalk",
         bundleIdentifier: "com.kakao.KakaoTalkMac",
         imagePath: nil,
-        scale: 1.0
+        scale: 1.0,
+        reactionMode: .visibleOnly,
+        showsNotificationContent: false,
+        customNotificationMessage: nil
     )
 }
 

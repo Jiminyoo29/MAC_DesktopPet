@@ -13,6 +13,10 @@ class PetInteractionView: NSView {
     var onSetPoliteTone: (() -> Void)?
     var onSetCuteTone: (() -> Void)?
     var onSetChicTone: (() -> Void)?
+    var onSetVisibleOnlyMode: (() -> Void)?
+    var onSetIncludeHiddenMode: (() -> Void)?
+    var onToggleNotificationContent: (() -> Void)?
+    var onSetCustomNotificationMessage: (() -> Void)?
     var onChooseLinkedApp: (() -> Void)?
     var onChooseImage: (() -> Void)?
     var onResetImage: (() -> Void)?
@@ -21,6 +25,8 @@ class PetInteractionView: NSView {
     var onSetLargeSize: (() -> Void)?
     var onSetCustomScale: ((Double) -> Void)?
     var currentScale: Double = 1.0
+    var currentReactionMode: NotificationReactionMode = .visibleOnly
+    var showsNotificationContent = false
     var onCreatePet: (() -> Void)?
     var onClosePet: (() -> Void)?
     var onOpenFullDiskAccessSettings: (() -> Void)?
@@ -83,6 +89,30 @@ class PetInteractionView: NSView {
         let toneItem = NSMenuItem(title: "말투", action: nil, keyEquivalent: "")
         toneItem.submenu = toneMenu
         menu.addItem(toneItem)
+
+        let reactionMenu = NSMenu()
+        let visibleOnly = NSMenuItem(title: "표시된 알림만", action: #selector(setVisibleOnlyMode), keyEquivalent: "")
+        visibleOnly.target = self
+        visibleOnly.state = currentReactionMode == .visibleOnly ? .on : .off
+        reactionMenu.addItem(visibleOnly)
+
+        let includeHidden = NSMenuItem(title: "숨겨진 알림도", action: #selector(setIncludeHiddenMode), keyEquivalent: "")
+        includeHidden.target = self
+        includeHidden.state = currentReactionMode == .includeHidden ? .on : .off
+        reactionMenu.addItem(includeHidden)
+
+        let reactionItem = NSMenuItem(title: "알림 반응", action: nil, keyEquivalent: "")
+        reactionItem.submenu = reactionMenu
+        menu.addItem(reactionItem)
+
+        let content = NSMenuItem(title: "알림 내용 그대로 표시", action: #selector(toggleNotificationContent), keyEquivalent: "")
+        content.target = self
+        content.state = showsNotificationContent ? .on : .off
+        menu.addItem(content)
+
+        let customMessage = NSMenuItem(title: "알림 문구 바꾸기...", action: #selector(setCustomNotificationMessage), keyEquivalent: "")
+        customMessage.target = self
+        menu.addItem(customMessage)
 
         let chooseImage = NSMenuItem(title: "이미지 바꾸기...", action: #selector(chooseImage), keyEquivalent: "")
         chooseImage.target = self
@@ -182,6 +212,22 @@ class PetInteractionView: NSView {
         onSetChicTone?()
     }
 
+    @objc private func setVisibleOnlyMode() {
+        onSetVisibleOnlyMode?()
+    }
+
+    @objc private func setIncludeHiddenMode() {
+        onSetIncludeHiddenMode?()
+    }
+
+    @objc private func toggleNotificationContent() {
+        onToggleNotificationContent?()
+    }
+
+    @objc private func setCustomNotificationMessage() {
+        onSetCustomNotificationMessage?()
+    }
+
     @objc private func chooseImage() {
         onChooseImage?()
     }
@@ -243,6 +289,10 @@ struct DraggableOverlay: NSViewRepresentable {
     let onSetPoliteTone: () -> Void
     let onSetCuteTone: () -> Void
     let onSetChicTone: () -> Void
+    let onSetVisibleOnlyMode: () -> Void
+    let onSetIncludeHiddenMode: () -> Void
+    let onToggleNotificationContent: () -> Void
+    let onSetCustomNotificationMessage: () -> Void
     let onChooseLinkedApp: () -> Void
     let onChooseImage: () -> Void
     let onResetImage: () -> Void
@@ -251,6 +301,8 @@ struct DraggableOverlay: NSViewRepresentable {
     let onSetLargeSize: () -> Void
     let onSetCustomScale: (Double) -> Void
     let currentScale: Double
+    let currentReactionMode: NotificationReactionMode
+    let showsNotificationContent: Bool
     let onCreatePet: () -> Void
     let onClosePet: () -> Void
     let onOpenFullDiskAccessSettings: () -> Void
@@ -268,6 +320,10 @@ struct DraggableOverlay: NSViewRepresentable {
         v.onSetPoliteTone = onSetPoliteTone
         v.onSetCuteTone = onSetCuteTone
         v.onSetChicTone = onSetChicTone
+        v.onSetVisibleOnlyMode = onSetVisibleOnlyMode
+        v.onSetIncludeHiddenMode = onSetIncludeHiddenMode
+        v.onToggleNotificationContent = onToggleNotificationContent
+        v.onSetCustomNotificationMessage = onSetCustomNotificationMessage
         v.onChooseLinkedApp = onChooseLinkedApp
         v.onChooseImage = onChooseImage
         v.onResetImage = onResetImage
@@ -276,6 +332,8 @@ struct DraggableOverlay: NSViewRepresentable {
         v.onSetLargeSize = onSetLargeSize
         v.onSetCustomScale = onSetCustomScale
         v.currentScale = currentScale
+        v.currentReactionMode = currentReactionMode
+        v.showsNotificationContent = showsNotificationContent
         v.onCreatePet = onCreatePet
         v.onClosePet = onClosePet
         v.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings
@@ -293,6 +351,10 @@ struct DraggableOverlay: NSViewRepresentable {
         nsView.onSetPoliteTone = onSetPoliteTone
         nsView.onSetCuteTone = onSetCuteTone
         nsView.onSetChicTone = onSetChicTone
+        nsView.onSetVisibleOnlyMode = onSetVisibleOnlyMode
+        nsView.onSetIncludeHiddenMode = onSetIncludeHiddenMode
+        nsView.onToggleNotificationContent = onToggleNotificationContent
+        nsView.onSetCustomNotificationMessage = onSetCustomNotificationMessage
         nsView.onChooseLinkedApp = onChooseLinkedApp
         nsView.onChooseImage = onChooseImage
         nsView.onResetImage = onResetImage
@@ -301,6 +363,8 @@ struct DraggableOverlay: NSViewRepresentable {
         nsView.onSetLargeSize = onSetLargeSize
         nsView.onSetCustomScale = onSetCustomScale
         nsView.currentScale = currentScale
+        nsView.currentReactionMode = currentReactionMode
+        nsView.showsNotificationContent = showsNotificationContent
         nsView.onCreatePet = onCreatePet
         nsView.onClosePet = onClosePet
         nsView.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings

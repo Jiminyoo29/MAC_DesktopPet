@@ -6,6 +6,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var viewModels: [UUID: PetViewModel] = [:]
     var configurations: [PetConfiguration] = []
     var notificationMonitor: KakaoTalkNotificationMonitor!
+    private var statusItem: NSStatusItem?
+    private var petsHidden = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         configurations = PetConfigurationStore.load()
@@ -14,18 +16,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         notificationMonitor = KakaoTalkNotificationMonitor(
-            targetBundleIdentifiers: { [weak self] in
-                self?.configurations.map(\.bundleIdentifier) ?? []
+            targetConfigurations: { [weak self] in
+                self?.configurations.map {
+                    NotificationMonitorTarget(
+                        bundleIdentifier: $0.bundleIdentifier,
+                        reactionMode: $0.reactionMode,
+                        showsNotificationContent: $0.showsNotificationContent
+                    )
+                } ?? []
             },
-            onNotification: { [weak self] bundleIdentifier in
+            onNotification: { [weak self] event in
                 guard let self else { return }
                 let matchedViewModels = self.viewModels.values
-                    .filter { $0.matches(bundleIdentifier: bundleIdentifier) }
+                    .filter { $0.matches(bundleIdentifier: event.bundleIdentifier) }
 
                 if matchedViewModels.isEmpty, self.viewModels.count == 1 {
-                    self.viewModels.values.forEach { $0.showNotification() }
+                    self.viewModels.values.forEach { $0.showNotification(content: event.content) }
                 } else {
-                    matchedViewModels.forEach { $0.showNotification() }
+                    matchedViewModels.forEach { $0.showNotification(content: event.content) }
                 }
             },
             onAccessDenied: { [weak self] in
@@ -37,6 +45,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         notificationMonitor.start()
+        setupStatusItem()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            OnboardingPresenter.showIfNeeded()
+        }
     }
 
     private func createWindow(for configuration: PetConfiguration, offsetIndex: Int) {
@@ -87,6 +100,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         configurations.append(configuration)
         PetConfigurationStore.save(configurations)
         createWindow(for: configuration, offsetIndex: configurations.count - 1)
+        petsHidden = false
+        refreshStatusMenu()
     }
 
     private func closePet(id: UUID) {
@@ -100,6 +115,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModels[id] = nil
         configurations.removeAll { $0.id == id }
         PetConfigurationStore.save(configurations)
+        refreshStatusMenu()
     }
 
     private func updateConfiguration(_ updated: PetConfiguration) {
@@ -121,4 +137,86 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    private func setupStatusItem() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem?.button?.title = "🐰"
+        refreshStatusMenu()
+    }
+
+    private func refreshStatusMenu() {
+        let menu = NSMenu()
+
+        let visibilityTitle = petsHidden ? "펫 보이기" : "펫 숨기기"
+        let visibility = NSMenuItem(title: visibilityTitle, action: #selector(togglePetsVisibility), keyEquivalent: "")
+        visibility.target = self
+        menu.addItem(visibility)
+
+        let newPet = NSMenuItem(title: "새 펫 만들기", action: #selector(addPetFromMenuBar), keyEquivalent: "")
+        newPet.target = self
+        menu.addItem(newPet)
+
+        menu.addItem(.separator())
+
+        let launchAtLogin = NSMenuItem(title: "Mac 시작 시 자동 실행", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launchAtLogin.target = self
+        launchAtLogin.state = LoginItemController.isEnabled ? .on : .off
+        menu.addItem(launchAtLogin)
+
+        let onboarding = NSMenuItem(title: "권한 안내 보기", action: #selector(showOnboarding), keyEquivalent: "")
+        onboarding.target = self
+        menu.addItem(onboarding)
+
+        let fullDisk = NSMenuItem(title: "알림 감지 권한 열기", action: #selector(openFullDiskAccessSettings), keyEquivalent: "")
+        fullDisk.target = self
+        menu.addItem(fullDisk)
+
+        let accessibility = NSMenuItem(title: "빠른 감지 권한 열기", action: #selector(openAccessibilitySettings), keyEquivalent: "")
+        accessibility.target = self
+        menu.addItem(accessibility)
+
+        menu.addItem(.separator())
+
+        let quit = NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(quit)
+
+        statusItem?.menu = menu
+    }
+
+    @objc private func togglePetsVisibility() {
+        petsHidden.toggle()
+        for window in windows.values {
+            if petsHidden {
+                window.orderOut(nil)
+            } else {
+                window.makeKeyAndOrderFront(nil)
+            }
+        }
+        refreshStatusMenu()
+    }
+
+    @objc private func addPetFromMenuBar() {
+        addPet()
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        do {
+            try LoginItemController.setEnabled(!LoginItemController.isEnabled)
+        } catch {
+            viewModels.values.first?.showNotification(content: "시작 프로그램 설정을 바꾸지 못했어요.")
+        }
+        refreshStatusMenu()
+    }
+
+    @objc private func showOnboarding() {
+        OnboardingPresenter.show()
+    }
+
+    @objc private func openFullDiskAccessSettings() {
+        OnboardingPresenter.openFullDiskAccessSettings()
+    }
+
+    @objc private func openAccessibilitySettings() {
+        OnboardingPresenter.openAccessibilitySettings()
+    }
 }
