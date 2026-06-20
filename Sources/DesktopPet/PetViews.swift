@@ -17,8 +17,14 @@ struct PetRootView: View {
             DraggableOverlay(
                 onTap: viewModel.tap,
                 onDoubleClick: viewModel.openLinkedApp,
+                onChooseLinkedApp: viewModel.chooseLinkedApp,
                 onChooseImage: viewModel.choosePetImage,
                 onResetImage: viewModel.resetPetImage,
+                onSetSmallSize: viewModel.setSmallSize,
+                onSetMediumSize: viewModel.setMediumSize,
+                onSetLargeSize: viewModel.setLargeSize,
+                onCreatePet: viewModel.createPet,
+                onClosePet: viewModel.closePet,
                 onOpenFullDiskAccessSettings: viewModel.openFullDiskAccessSettings,
                 onOpenAccessibilitySettings: viewModel.openAccessibilitySettings,
                 onShowNotificationStatus: viewModel.showNotificationStatus,
@@ -47,7 +53,8 @@ struct PetRootView: View {
             }
             .frame(width: 160, height: 220)
         }
-        .frame(width: 160, height: 220)
+        .scaleEffect(viewModel.scale)
+        .frame(width: 160 * viewModel.scale, height: 220 * viewModel.scale)
         .onReceive(floatTimer) { _ in floatPhase += 0.042 }
         .onReceive(blinkTimer) { _ in triggerBlink() }
     }

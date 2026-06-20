@@ -7,10 +7,15 @@ class PetViewModel: ObservableObject {
     @Published var showDialogue = false
     @Published var isBouncing = false
     @Published var petImagePath: String?
+    @Published var appName: String
+    @Published var scale: Double
     private(set) var notificationStatus = "알림 감지 준비 중"
 
-    private let petImagePathKey = "petImagePath"
-    private let kakaoTalkBundleIdentifier = "com.kakao.KakaoTalkMac"
+    let id: UUID
+    private var bundleIdentifier: String
+    private let onConfigurationChanged: (PetConfiguration) -> Void
+    private let onCreatePet: () -> Void
+    private let onClosePet: (UUID) -> Void
 
     private let dialogues = [
         "안녕하세요! 😊",
@@ -29,8 +34,20 @@ class PetViewModel: ObservableObject {
         "같이 힘내요! 🐾",
     ]
 
-    init() {
-        petImagePath = UserDefaults.standard.string(forKey: petImagePathKey)
+    init(
+        configuration: PetConfiguration,
+        onConfigurationChanged: @escaping (PetConfiguration) -> Void,
+        onCreatePet: @escaping () -> Void,
+        onClosePet: @escaping (UUID) -> Void
+    ) {
+        id = configuration.id
+        appName = configuration.appName
+        bundleIdentifier = configuration.bundleIdentifier
+        petImagePath = configuration.imagePath
+        scale = configuration.scale
+        self.onConfigurationChanged = onConfigurationChanged
+        self.onCreatePet = onCreatePet
+        self.onClosePet = onClosePet
     }
 
     func tap() {
@@ -38,19 +55,67 @@ class PetViewModel: ObservableObject {
     }
 
     func openLinkedApp() {
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: kakaoTalkBundleIdentifier) {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) {
             NSWorkspace.shared.open(url)
         } else {
-            speak("카카오톡을 찾지 못했어요.")
+            speak("\(appName)을 찾지 못했어요.")
         }
     }
 
-    func showKakaoTalkNotification() {
-        speak("메시지가 왔어요!")
+    func showNotification() {
+        speak("\(appName) 알림이 왔어요!")
     }
 
     func showTestNotification() {
         speak("테스트 알림이에요!")
+    }
+
+    func createPet() {
+        onCreatePet()
+    }
+
+    func closePet() {
+        onClosePet(id)
+    }
+
+    func setSmallSize() {
+        setScale(0.8)
+        speak("작게 변했어요.")
+    }
+
+    func setMediumSize() {
+        setScale(1.0)
+        speak("기본 크기예요.")
+    }
+
+    func setLargeSize() {
+        setScale(1.25)
+        speak("크게 변했어요.")
+    }
+
+    func chooseLinkedApp() {
+        let panel = NSOpenPanel()
+        panel.title = "연결할 앱 선택"
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowedContentTypes = [.application]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+
+        if panel.runModal() == .OK, let url = panel.url {
+            let bundle = Bundle(url: url)
+            guard let bundleIdentifier = bundle?.bundleIdentifier else {
+                speak("앱 정보를 읽지 못했어요.")
+                return
+            }
+
+            let displayName = bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            let bundleName = bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String
+            appName = displayName ?? bundleName ?? url.deletingPathExtension().lastPathComponent
+            self.bundleIdentifier = bundleIdentifier
+            saveConfiguration()
+            speak("\(appName)에 연결했어요.")
+        }
     }
 
     func updateNotificationStatus(_ status: String) {
@@ -105,15 +170,38 @@ class PetViewModel: ObservableObject {
 
         if panel.runModal() == .OK, let url = panel.url {
             petImagePath = url.path
-            UserDefaults.standard.set(url.path, forKey: petImagePathKey)
+            saveConfiguration()
             speak("새 모습 마음에 들어요?")
         }
     }
 
     func resetPetImage() {
         petImagePath = nil
-        UserDefaults.standard.removeObject(forKey: petImagePathKey)
+        saveConfiguration()
         speak("토끼로 돌아왔어요! 🐰")
+    }
+
+    func configuration() -> PetConfiguration {
+        PetConfiguration(
+            id: id,
+            appName: appName,
+            bundleIdentifier: bundleIdentifier,
+            imagePath: petImagePath,
+            scale: scale
+        )
+    }
+
+    func matches(bundleIdentifier: String) -> Bool {
+        self.bundleIdentifier == bundleIdentifier
+    }
+
+    private func setScale(_ value: Double) {
+        scale = value
+        saveConfiguration()
+    }
+
+    private func saveConfiguration() {
+        onConfigurationChanged(configuration())
     }
 
     private func speak(_ text: String) {

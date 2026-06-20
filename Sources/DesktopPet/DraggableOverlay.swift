@@ -7,8 +7,14 @@ import SwiftUI
 class PetInteractionView: NSView {
     var onTap: (() -> Void)?
     var onDoubleClick: (() -> Void)?
+    var onChooseLinkedApp: (() -> Void)?
     var onChooseImage: (() -> Void)?
     var onResetImage: (() -> Void)?
+    var onSetSmallSize: (() -> Void)?
+    var onSetMediumSize: (() -> Void)?
+    var onSetLargeSize: (() -> Void)?
+    var onCreatePet: (() -> Void)?
+    var onClosePet: (() -> Void)?
     var onOpenFullDiskAccessSettings: (() -> Void)?
     var onOpenAccessibilitySettings: (() -> Void)?
     var onShowNotificationStatus: (() -> Void)?
@@ -33,9 +39,13 @@ class PetInteractionView: NSView {
 
     override func rightMouseDown(with event: NSEvent) {
         let menu = NSMenu()
-        let open = NSMenuItem(title: "카카오톡 열기", action: #selector(openLinkedApp), keyEquivalent: "")
+        let open = NSMenuItem(title: "연결 앱 열기", action: #selector(openLinkedApp), keyEquivalent: "")
         open.target = self
         menu.addItem(open)
+
+        let chooseApp = NSMenuItem(title: "연결 앱 바꾸기...", action: #selector(chooseLinkedApp), keyEquivalent: "")
+        chooseApp.target = self
+        menu.addItem(chooseApp)
 
         let chooseImage = NSMenuItem(title: "이미지 바꾸기...", action: #selector(chooseImage), keyEquivalent: "")
         chooseImage.target = self
@@ -46,6 +56,27 @@ class PetInteractionView: NSView {
         menu.addItem(resetImage)
 
         menu.addItem(.separator())
+
+        let sizeMenu = NSMenu()
+        let small = NSMenuItem(title: "작게", action: #selector(setSmallSize), keyEquivalent: "")
+        small.target = self
+        sizeMenu.addItem(small)
+
+        let medium = NSMenuItem(title: "기본", action: #selector(setMediumSize), keyEquivalent: "")
+        medium.target = self
+        sizeMenu.addItem(medium)
+
+        let large = NSMenuItem(title: "크게", action: #selector(setLargeSize), keyEquivalent: "")
+        large.target = self
+        sizeMenu.addItem(large)
+
+        let sizeItem = NSMenuItem(title: "크기", action: nil, keyEquivalent: "")
+        sizeItem.submenu = sizeMenu
+        menu.addItem(sizeItem)
+
+        let createPet = NSMenuItem(title: "새 펫 만들기", action: #selector(createPet), keyEquivalent: "")
+        createPet.target = self
+        menu.addItem(createPet)
 
         let privacy = NSMenuItem(title: "알림 감지 권한 열기", action: #selector(openFullDiskAccessSettings), keyEquivalent: "")
         privacy.target = self
@@ -64,6 +95,10 @@ class PetInteractionView: NSView {
         menu.addItem(test)
 
         menu.addItem(.separator())
+        let closePet = NSMenuItem(title: "이 펫 닫기", action: #selector(closePet), keyEquivalent: "")
+        closePet.target = self
+        menu.addItem(closePet)
+
         let quit = NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
         NSMenu.popUpContextMenu(menu, with: event, for: self)
@@ -73,12 +108,36 @@ class PetInteractionView: NSView {
         onDoubleClick?()
     }
 
+    @objc private func chooseLinkedApp() {
+        onChooseLinkedApp?()
+    }
+
     @objc private func chooseImage() {
         onChooseImage?()
     }
 
     @objc private func resetImage() {
         onResetImage?()
+    }
+
+    @objc private func setSmallSize() {
+        onSetSmallSize?()
+    }
+
+    @objc private func setMediumSize() {
+        onSetMediumSize?()
+    }
+
+    @objc private func setLargeSize() {
+        onSetLargeSize?()
+    }
+
+    @objc private func createPet() {
+        onCreatePet?()
+    }
+
+    @objc private func closePet() {
+        onClosePet?()
     }
 
     @objc private func openFullDiskAccessSettings() {
@@ -104,8 +163,14 @@ class PetInteractionView: NSView {
 struct DraggableOverlay: NSViewRepresentable {
     let onTap: () -> Void
     let onDoubleClick: () -> Void
+    let onChooseLinkedApp: () -> Void
     let onChooseImage: () -> Void
     let onResetImage: () -> Void
+    let onSetSmallSize: () -> Void
+    let onSetMediumSize: () -> Void
+    let onSetLargeSize: () -> Void
+    let onCreatePet: () -> Void
+    let onClosePet: () -> Void
     let onOpenFullDiskAccessSettings: () -> Void
     let onOpenAccessibilitySettings: () -> Void
     let onShowNotificationStatus: () -> Void
@@ -115,8 +180,14 @@ struct DraggableOverlay: NSViewRepresentable {
         let v = PetInteractionView()
         v.onTap = onTap
         v.onDoubleClick = onDoubleClick
+        v.onChooseLinkedApp = onChooseLinkedApp
         v.onChooseImage = onChooseImage
         v.onResetImage = onResetImage
+        v.onSetSmallSize = onSetSmallSize
+        v.onSetMediumSize = onSetMediumSize
+        v.onSetLargeSize = onSetLargeSize
+        v.onCreatePet = onCreatePet
+        v.onClosePet = onClosePet
         v.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings
         v.onOpenAccessibilitySettings = onOpenAccessibilitySettings
         v.onShowNotificationStatus = onShowNotificationStatus
@@ -126,8 +197,14 @@ struct DraggableOverlay: NSViewRepresentable {
     func updateNSView(_ nsView: PetInteractionView, context: Context) {
         nsView.onTap = onTap
         nsView.onDoubleClick = onDoubleClick
+        nsView.onChooseLinkedApp = onChooseLinkedApp
         nsView.onChooseImage = onChooseImage
         nsView.onResetImage = onResetImage
+        nsView.onSetSmallSize = onSetSmallSize
+        nsView.onSetMediumSize = onSetMediumSize
+        nsView.onSetLargeSize = onSetLargeSize
+        nsView.onCreatePet = onCreatePet
+        nsView.onClosePet = onClosePet
         nsView.onOpenFullDiskAccessSettings = onOpenFullDiskAccessSettings
         nsView.onOpenAccessibilitySettings = onOpenAccessibilitySettings
         nsView.onShowNotificationStatus = onShowNotificationStatus
