@@ -12,6 +12,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var petsHidden = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        terminateDuplicateInstances()
+
         configurations = PetConfigurationStore.load()
         for (index, configuration) in configurations.enumerated() {
             createWindow(for: configuration, offsetIndex: index)
@@ -249,6 +251,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openAccessibilitySettings() {
         OnboardingPresenter.openAccessibilitySettings()
+    }
+
+    private func terminateDuplicateInstances() {
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let currentBundleID = Bundle.main.bundleIdentifier
+        let runningApplications = NSWorkspace.shared.runningApplications.map {
+            RunningApplicationSnapshot(
+                bundleIdentifier: $0.bundleIdentifier,
+                processIdentifier: $0.processIdentifier
+            )
+        }
+        let duplicatePIDs = Set(SingleInstancePolicy.duplicateProcessIdentifiers(
+            currentProcessIdentifier: currentPID,
+            currentBundleIdentifier: currentBundleID,
+            runningApplications: runningApplications
+        ))
+
+        guard !duplicatePIDs.isEmpty else { return }
+
+        let duplicateApplications = NSWorkspace.shared.runningApplications
+            .filter { duplicatePIDs.contains($0.processIdentifier) }
+
+        duplicateApplications.forEach { $0.terminate() }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            duplicateApplications
+                .filter { !$0.isTerminated }
+                .forEach { $0.forceTerminate() }
+        }
     }
 
     private func showSettingsWindow() {
