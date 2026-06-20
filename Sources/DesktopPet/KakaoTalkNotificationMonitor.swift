@@ -184,12 +184,18 @@ final class KakaoTalkNotificationMonitor {
 
     private static func latestVisibleNotificationFingerprints(targetBundleIdentifiers: [String]) -> PollResult? {
         guard AXIsProcessTrusted() else { return nil }
-        let targetNames = targetBundleIdentifiers.map { bundleIdentifier -> (String, String) in
+        let targetNames = targetBundleIdentifiers.flatMap { bundleIdentifier -> [(String, String)] in
             let appName = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)?
                 .deletingPathExtension()
                 .lastPathComponent
                 .lowercased() ?? bundleIdentifier.lowercased()
-            return (bundleIdentifier, appName)
+            var names = [appName, bundleIdentifier.lowercased()]
+            if bundleIdentifier.lowercased().contains("kakao") {
+                names.append("카카오")
+                names.append("카카오톡")
+                names.append("kakao")
+            }
+            return names.map { (bundleIdentifier, $0) }
         }
 
         let notificationCenterApps = NSWorkspace.shared.runningApplications.filter { app in
@@ -296,14 +302,14 @@ final class KakaoTalkNotificationMonitor {
         let dateColumn = ["delivered_date", "presented_date", "date"].first { recordColumns.contains($0) }
         let dateExpression = dateColumn.map { "r.\($0)" } ?? "0"
         let escapedTargets = targetBundleIdentifiers
-            .map { "'\($0.replacingOccurrences(of: "'", with: "''"))'" }
+            .map { "'\($0.lowercased().replacingOccurrences(of: "'", with: "''"))'" }
             .joined(separator: ",")
 
         let sql = """
         SELECT a.\(appIdentifierColumn) || '|' || r.rowid || '|' || \(dateExpression)
         FROM record r
         LEFT JOIN app a ON r.app_id = a.app_id
-        WHERE a.\(appIdentifierColumn) IN (\(escapedTargets))
+        WHERE lower(a.\(appIdentifierColumn)) IN (\(escapedTargets))
         ORDER BY \(dateExpression) DESC
         LIMIT 8;
         """
@@ -333,11 +339,17 @@ final class KakaoTalkNotificationMonitor {
         let tableResult = runSQLite(databaseURL: databaseURL, sql: "SELECT name FROM sqlite_master WHERE type='table';")
         guard case let .rows(tables) = tableResult else { return tableResult }
 
-        let targetNeedles = targetBundleIdentifiers.flatMap { bundleIdentifier -> [String] in
+        let targetNeedles = targetBundleIdentifiers.flatMap { bundleIdentifier -> [(bundleIdentifier: String, needle: String)] in
             let appName = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)?
                 .deletingPathExtension()
                 .lastPathComponent ?? ""
-            return [bundleIdentifier.lowercased(), appName.lowercased()].filter { !$0.isEmpty }
+            var needles = [bundleIdentifier.lowercased(), appName.lowercased()].filter { !$0.isEmpty }
+            if bundleIdentifier.lowercased().contains("kakao") {
+                needles.append("카카오")
+                needles.append("카카오톡")
+                needles.append("kakao")
+            }
+            return needles.map { (bundleIdentifier, $0) }
         }
 
         var matches: [String] = []
@@ -349,11 +361,14 @@ final class KakaoTalkNotificationMonitor {
             if case .accessDenied = result { return .accessDenied }
             guard case let .rows(rows) = result else { continue }
 
-            let filteredRows = rows.filter { row in
+            let filteredRows = rows.compactMap { row -> String? in
                 let lowered = row.lowercased()
-                return targetNeedles.contains { lowered.contains($0) }
+                guard let target = targetNeedles.first(where: { lowered.contains($0.needle) }) else {
+                    return nil
+                }
+                return "\(target.bundleIdentifier)|fallback|\(table)|\(row.hashValue)"
             }
-            matches.append(contentsOf: filteredRows.map { "\(table)|\($0)" })
+            matches.append(contentsOf: filteredRows)
         }
 
         return .rows(Array(matches.prefix(20)))
